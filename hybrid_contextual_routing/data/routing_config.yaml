@@ -1,10 +1,14 @@
 # Hybrid Contextual Model Routing — Default Configuration
 #
 # This file ships with the plugin. To configure, create a copy at:
-#   ~/.hermes/profiles/<your-profile>/hybrid_routing/routing_config.yaml
+# $HERMES_HOME/hybrid_routing/routing_config.yaml
+# (`HERMES_HOME` is ~/.hermes for the default profile or
+# ~/.hermes/profiles/<name> for a named profile.)
 # Then fill in YOUR model refs below.
 #
 # Models are referenced as "provider/model-id" matching Hermes provider names.
+# Refs must be 512 characters or fewer and contain no whitespace or control
+# characters. Both provider and model-id must be non-empty.
 # Run `hermes auth list` to see which providers you have configured.
 # Run `hermes model` to see your available models.
 #
@@ -120,9 +124,11 @@ roles:
     cues: []
 
 # ── Sensitivity ────────────────────────────────────────────────────────
+# Bundled patterns are a non-removable safety baseline. Patterns in a copied
+# override are additive and may extend, but never replace, those detectors.
 # Route sensitive content to a local or separate provider.
 # For true local-only, point this at a local inference server.
-# Leave blank to disable sensitivity-based routing.
+# Leave blank to fail closed: sensitive classifications return no route.
 sensitivity:
   local_only_model: ""
   patterns:
@@ -167,6 +173,8 @@ difficulty:
 # ── Delegation Threshold ───────────────────────────────────────────────
 # Set primary_model to match YOUR session's default model.
 # Leave blank to always delegate (not recommended).
+# A skipped tier stays inline only when the selected model is the primary model;
+# role overrides and fallback tiers still recommend separate execution.
 delegation:
   skip_for_tier: [fast]
   skip_if_same_as_primary: true

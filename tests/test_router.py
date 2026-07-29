@@ -1,0 +1,538 @@
+from __future__ import annotations
+
+import json
+from copy import deepcopy
+from datetime import date
+from pathlib import Path
+
+import pytest
+import yaml
+
+from hybrid_contextual_routing.router import HybridRouter
+
+DEFAULT_CONFIG = (
+    Path(__file__).parents[1]
+    / "hybrid_contextual_routing"
+    / "data"
+    / "routing_config.yaml"
+)
+
+
+def configured_router(tmp_path, mutate) -> HybridRouter:
+    config = yaml.safe_load(DEFAULT_CONFIG.read_text(encoding="utf-8"))
+    config = deepcopy(config)
+    mutate(config)
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    return HybridRouter(config_path=str(config_path))
+
+
+def test_sensitive_content_without_local_model_fails_closed(tmp_path):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "openai-codex/gpt-5.6-sol"
+        config["delegation"]["primary_model"] = "openai-codex/gpt-5.6-sol"
+
+    decision = configured_router(tmp_path, configure).classify("password=private-value")
+
+    assert decision.sensitivity == "sensitive"
+    assert decision.model == ""
+    assert decision.candidates == []
+    assert decision.should_delegate is False
+    assert "local-only model is not configured" in decision.reason
+
+
+def test_sensitive_content_has_no_cloud_fallbacks_and_requests_separate_execution(
+    tmp_path,
+):
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "openai-codex/fast"
+        config["tiers"]["balanced"]["model"] = "openai-codex/balanced"
+        config["tiers"]["strong"]["model"] = "xai-oauth/strong"
+        config["sensitivity"]["local_only_model"] = "custom:local/private-model"
+        config["delegation"]["primary_model"] = "openai-codex/primary"
+
+    decision = configured_router(tmp_path, configure).classify("api_key=private-value")
+
+    assert decision.model == "custom:local/private-model"
+    assert decision.candidates == ["custom:local/private-model"]
+    assert decision.to_dict()["candidates"] == decision.candidates
+    assert decision.should_delegate is True
+    assert "delegated" not in decision.reason
+    assert "separate execution" in decision.reason
+
+
+def test_blank_config_still_classifies_task_metadata():
+    decision = HybridRouter().classify(
+        "Debug this Python function that has a bug in the import logic"
+    )
+
+    assert decision.model == ""
+    assert decision.tier == "strong"
+    assert decision.role == "coding"
+    assert decision.difficulty == "hard"
+    assert decision.sensitivity == "normal"
+    assert decision.should_delegate is False
+
+
+def test_builtin_self_test_validates_classifier_with_blank_models():
+    results = HybridRouter().run_tests()
+
+    assert results["passed"] == results["total"] == 9
+    assert all(result["passed"] for result in results["results"])
+
+
+def test_partial_config_never_invents_an_unconfigured_model(tmp_path):
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "custom:local/only-configured-model"
+
+    decision = configured_router(tmp_path, configure).classify(
+        "Summarize the quarterly report for leadership"
+    )
+
+    assert decision.model == "custom:local/only-configured-model"
+    assert decision.candidates == ["custom:local/only-configured-model"]
+    assert "glm-5.2" not in decision.reason
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("hello there", ["provider/fast", "provider/balanced", "provider/strong"]),
+        (
+            "Summarize the quarterly report for leadership",
+            ["provider/balanced", "provider/strong", "provider/fast"],
+        ),
+        (
+            "Analyze the strategic trade-offs in this architecture",
+            ["provider/strong", "provider/balanced", "provider/fast"],
+        ),
+    ],
+)
+def test_tier_fallbacks_degrade_by_capability_distance(tmp_path, text, expected):
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "provider/fast"
+        config["tiers"]["balanced"]["model"] = "provider/balanced"
+        config["tiers"]["strong"]["model"] = "provider/strong"
+
+    decision = configured_router(tmp_path, configure).classify(text)
+
+    assert decision.candidates == expected
+
+
+def test_missing_tier_uses_nearest_capability_fallback(tmp_path):
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "provider/fast"
+        config["tiers"]["strong"]["model"] = "provider/strong"
+
+    decision = configured_router(tmp_path, configure).classify(
+        "Summarize the quarterly report for leadership"
+    )
+
+    assert decision.tier == "balanced"
+    assert decision.model == "provider/strong"
+    assert decision.candidates == ["provider/strong", "provider/fast"]
+
+
+def test_simple_cues_are_case_insensitive():
+    router = HybridRouter()
+
+    assert (
+        router.classify_difficulty("Good morning everyone joining the call today")
+        == "simple"
+    )
+
+
+def test_role_cues_match_tokens_and_regular_inflections_not_embedded_words():
+    router = HybridRouter()
+
+    assert router.classify_role("This contest celebrates design") == "general"
+    assert router.classify_role("The team is testing the release") == "coding"
+    assert router.classify_role("We need unit tests for this module") == "coding"
+    assert router.classify_role("The attestation is complete") == "general"
+
+
+@pytest.mark.parametrize("text", ["refactor", "refactors", "refactored", "refactoring"])
+def test_shipped_refactor_cue_matches_regular_inflections(text):
+    assert HybridRouter().classify_role(text) == "coding"
+
+
+@pytest.mark.parametrize("cue", ["", "   "])
+def test_role_cues_reject_empty_or_whitespace_values(tmp_path, cue):
+    def configure(config):
+        config["roles"]["coding"]["cues"] = [cue]
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"roles\.coding\.cues\[0\]"):
+        router.classify("hello")
+
+
+@pytest.mark.parametrize(
+    "cues",
+    [
+        ["x" * 129],
+        [f"cue-{index}" for index in range(65)],
+    ],
+)
+def test_role_cues_are_bounded(tmp_path, cues):
+    def configure(config):
+        config["roles"]["coding"]["cues"] = cues
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"roles\.coding\.cues"):
+        router.classify("hello")
+
+
+@pytest.mark.parametrize("mutation", ["extra", "missing"])
+def test_tiers_require_exactly_the_canonical_keys(tmp_path, mutation):
+    def configure(config):
+        if mutation == "extra":
+            config["tiers"]["fas"] = {"model": "provider/typo"}
+        else:
+            del config["tiers"]["fast"]
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(
+        ValueError, match="tiers must contain exactly: fast, balanced, strong"
+    ):
+        router.get_status()
+
+
+def test_canonical_tier_values_must_be_mappings(tmp_path):
+    def configure(config):
+        config["tiers"]["fast"] = None
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"tiers\.fast must be a YAML mapping"):
+        router.get_status()
+
+
+@pytest.mark.parametrize("invalid_value", [date(2026, 7, 29), -1, True, "128000"])
+def test_tier_max_input_tokens_must_be_a_nonnegative_integer(tmp_path, invalid_value):
+    def configure(config):
+        config["tiers"]["fast"]["max_input_tokens"] = invalid_value
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"tiers\.fast\.max_input_tokens"):
+        router.classify("hello")
+
+
+def test_status_returns_only_validated_supported_config_fields(tmp_path):
+    def configure(config):
+        unsupported = date(2026, 7, 29)
+        config["tiers"]["fast"]["unsupported"] = unsupported
+        config["roles"]["coding"]["unsupported"] = unsupported
+        config["difficulty"]["unsupported"] = unsupported
+        config["delegation"]["unsupported"] = unsupported
+
+    status = configured_router(tmp_path, configure).get_status()
+
+    json.dumps(status)
+    assert "unsupported" not in status["tiers"]["fast"]
+    assert "unsupported" not in status["roles"]["coding"]
+    assert "unsupported" not in status["difficulty"]
+    assert "unsupported" not in status["delegation"]
+
+
+def test_non_mapping_yaml_is_rejected_with_clear_error(tmp_path):
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must contain a YAML mapping"):
+        HybridRouter(config_path=str(config_path)).classify("hello")
+
+
+def test_invalid_regex_reports_the_config_field(tmp_path):
+    def configure(config):
+        config["sensitivity"]["patterns"] = ["[unterminated"]
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"sensitivity\.patterns\[0\]"):
+        router.classify("hello")
+
+
+def test_non_string_model_ref_reports_the_config_field(tmp_path):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = 42
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"tiers\.balanced\.model must be a string"):
+        router.classify("Summarize the report for leadership")
+
+
+def test_non_mapping_config_section_reports_the_section(tmp_path):
+    def configure(config):
+        config["roles"] = ["coding"]
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match="roles must be a YAML mapping"):
+        router.classify("hello")
+
+
+def test_non_mapping_delegation_section_reports_the_section(tmp_path):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "provider/balanced"
+        config["delegation"] = ["fast"]
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match="delegation must be a YAML mapping"):
+        router.classify("Summarize the report for leadership")
+
+
+def test_invalid_unused_role_model_is_not_silently_ignored(tmp_path):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "provider/balanced"
+        config["roles"]["coding"]["model"] = 42
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"roles\.coding\.model must be a string"):
+        router.classify("Summarize the report for leadership")
+
+
+def test_invalid_difficulty_threshold_reports_the_config_field(tmp_path):
+    def configure(config):
+        config["difficulty"]["hard_if_many_words"] = "many"
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(
+        ValueError,
+        match=r"difficulty\.hard_if_many_words must be a non-negative integer",
+    ):
+        router.classify("Review quarterly financial results for senior leadership")
+
+
+@pytest.mark.parametrize("patterns", [None, []])
+def test_sensitive_patterns_cannot_be_omitted_or_disabled(tmp_path, patterns):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "cloud/standard-model"
+        config["sensitivity"]["local_only_model"] = "local/private-model"
+        if patterns is None:
+            config["sensitivity"].pop("patterns")
+        else:
+            config["sensitivity"]["patterns"] = patterns
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(
+        ValueError,
+        match=r"sensitivity\.patterns must contain at least one pattern",
+    ):
+        router.classify("password=private-value")
+
+
+def test_custom_sensitivity_patterns_are_case_insensitive(tmp_path):
+    def configure(config):
+        config["sensitivity"]["patterns"] = [r"custom-secret=\S+"]
+        config["sensitivity"]["local_only_model"] = "local/private"
+        config["tiers"]["balanced"]["model"] = "cloud/standard"
+
+    decision = configured_router(tmp_path, configure).classify(
+        "CUSTOM-SECRET=private-value"
+    )
+
+    assert decision.sensitivity == "sensitive"
+    assert decision.model == "local/private"
+    assert decision.candidates == ["local/private"]
+
+
+def test_custom_patterns_cannot_replace_bundled_secret_detectors(tmp_path):
+    def configure(config):
+        config["sensitivity"]["patterns"] = [r"^CUSTOM_ONLY$"]
+        config["sensitivity"]["local_only_model"] = "local/private"
+        config["tiers"]["balanced"]["model"] = "cloud/standard"
+
+    router = configured_router(tmp_path, configure)
+
+    bundled_match = router.classify("password=private-value")
+    custom_match = router.classify("custom_only")
+
+    assert bundled_match.sensitivity == "sensitive"
+    assert bundled_match.model == "local/private"
+    assert bundled_match.candidates == ["local/private"]
+    assert custom_match.sensitivity == "sensitive"
+
+
+def test_status_validates_the_security_configuration(tmp_path):
+    def configure(config):
+        config["sensitivity"]["patterns"] = []
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(
+        ValueError,
+        match=r"sensitivity\.patterns must contain at least one pattern",
+    ):
+        router.get_status()
+
+
+def test_status_rejects_invalid_primary_model_before_rendering(tmp_path):
+    def configure(config):
+        config["delegation"]["primary_model"] = "provider/ok\x1b]52;c;payload\x07model"
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"delegation\.primary_model"):
+        router.get_status()
+
+
+def test_normal_route_rejects_invalid_local_only_model_during_common_validation(
+    tmp_path,
+):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "cloud/valid"
+        config["sensitivity"]["local_only_model"] = "local/\ud800"
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"sensitivity\.local_only_model"):
+        router.classify("Summarize the report for leadership")
+
+
+def test_custom_role_identifier_rejects_surrogates_before_routing(tmp_path):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "cloud/valid"
+        config["roles"]["custom\ud800role"] = {
+            "model": "cloud/custom",
+            "cues": ["match-custom-role"],
+        }
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match="roles key"):
+        router.classify("match-custom-role")
+
+
+@pytest.mark.parametrize(
+    ("section", "bad_name", "error_field"),
+    [
+        ("roles", "bad`role", "roles key"),
+        ("tiers", "bad\x1btier", "tiers key"),
+    ],
+)
+def test_output_exposed_config_identifiers_are_safe(
+    tmp_path, section, bad_name, error_field
+):
+    def configure(config):
+        config[section][bad_name] = {"model": "cloud/valid", "cues": ["match"]}
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=error_field):
+        router.get_status()
+
+
+def test_output_exposed_descriptions_reject_terminal_controls(tmp_path):
+    def configure(config):
+        config["roles"]["coding"]["description"] = "safe\x1b]52;c;payload\x07"
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"roles\.coding\.description"):
+        router.get_status()
+
+
+@pytest.mark.parametrize("invalid_tier", ["fas", "fast`@everyone", "fast\x1b"])
+def test_delegation_skip_tiers_require_safe_canonical_identifiers(
+    tmp_path, invalid_tier
+):
+    def configure(config):
+        config["delegation"]["skip_for_tier"] = [invalid_tier]
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"delegation\.skip_for_tier\[0\]"):
+        router.get_status()
+
+
+def test_status_reports_unique_active_sensitivity_pattern_count(tmp_path):
+    def configure(config):
+        config["sensitivity"]["patterns"] = [r"custom-secret=\S+"]
+
+    router = configured_router(tmp_path, configure)
+    status = router.get_status()
+
+    active_patterns = {pattern.pattern for pattern in router._compiled_sensitive}
+    assert status["sensitivity"]["pattern_count"] == len(active_patterns) == 5
+    assert len(router._compiled_sensitive) == 5
+
+
+def test_sensitive_route_stays_inline_when_local_model_is_primary(tmp_path):
+    def configure(config):
+        config["sensitivity"]["local_only_model"] = "local/private"
+        config["delegation"]["primary_model"] = "local/private"
+        config["delegation"]["skip_if_same_as_primary"] = True
+
+    decision = configured_router(tmp_path, configure).classify("password=private-value")
+
+    assert decision.model == "local/private"
+    assert decision.should_delegate is False
+    assert "same as primary model" in decision.reason
+
+
+def test_fast_role_override_delegates_when_selected_model_differs_from_primary(
+    tmp_path,
+):
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "provider/primary"
+        config["roles"]["creative"]["model"] = "cloud/creative-model"
+        config["delegation"]["primary_model"] = "provider/primary"
+        config["delegation"]["skip_for_tier"] = ["fast"]
+
+    decision = configured_router(tmp_path, configure).classify("write a blog")
+
+    assert decision.tier == "fast"
+    assert decision.model == "cloud/creative-model"
+    assert decision.should_delegate is True
+    assert "handled inline" not in decision.reason
+
+
+def test_missing_fast_tier_delegates_to_different_fallback_model(tmp_path):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "cloud/balanced-model"
+        config["delegation"]["primary_model"] = "local/primary"
+        config["delegation"]["skip_for_tier"] = ["fast"]
+
+    decision = configured_router(tmp_path, configure).classify("hello")
+
+    assert decision.tier == "fast"
+    assert decision.model == "cloud/balanced-model"
+    assert decision.should_delegate is True
+    assert "handled inline" not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "model_ref",
+    [
+        "provider/",
+        "/model",
+        "not-a-provider-ref",
+        " provider/model",
+        "provider/model ",
+        "provider/mo\n del",
+        "provider/ok\x1b[2Jmodel",
+        "provider/model\u2028suffix",
+        "provider/model\u200esuffix",
+        "provider/model`markdown",
+        "provider/model*markup",
+        "provider/\ud800",
+        "provider/" + "x" * 513,
+    ],
+)
+def test_malformed_or_terminal_unsafe_model_refs_are_rejected(tmp_path, model_ref):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = model_ref
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=r"tiers\.balanced\.model"):
+        router.classify("Summarize the report for leadership")
