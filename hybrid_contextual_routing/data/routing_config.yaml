@@ -148,14 +148,38 @@ model_egress: {}
 # The metadata is operator-declared; the plugin cannot verify physical transport.
 sensitivity:
   local_only_model: ""
-  # Baseline heuristics cover common assignments, deployment/region-qualified
+  # Baseline heuristics cover common assignments, bounded non-metadata-qualified
   # variables, bearer credentials, private-key headers, SSN/card-number formats,
-  # and confidentiality markers. Policy/status variables and negated state prose
-  # are excluded from assignment detection.
+  # and confidentiality markers. Policy/status variables and explicit negated
+  # state prose are excluded from assignment detection.
   # They are not a complete secret-scanning, PII, or DLP boundary.
   patterns:
-    - "(?i)(?:\\b|_)(?:api[_-]?key|secret[_-]?(?:access[_-]?)?key|password|(?:access[_-]?)?token|dbpassword|clientsecret|secret)(?:[_-](?:dev(?:elopment)?|test(?:ing)?|qa|uat|stag(?:e|ing)|prod(?:uction)?|local|sandbox|demo|preview|canary|primary|secondary|backup|dr|us|eu|ap|sa|ca|me|af|east|west|north|south|central|[0-9]{1,4})){0,4}(?:\\s*(?::|=)\\s*\\S+|\\s+(?:is|equals?)\\s+(?!(?:(?:[a-z]{2,32}ly)\\s+){0,3}(?:not|never|no|none|unset|missing|absent)\\b)\\S+)"
-    - "(?i)\\b(?:api[\\s_-]+key|password|token|secret(?:\\s+key)?)(?:['’]s)?(?:\\s+(?:current\\s+value|value|[a-z]{2,32}ly)){0,3}(?:\\s+for\\s+(?:the\\s+)?[a-z0-9_.-]{1,64}(?:\\s+(?:environment|env|account|tenant|workspace|cluster|service|application|app|database|db|region)){0,2})?(?:\\s+(?:current\\s+value|value|[a-z]{2,32}ly)){0,3}\\s+(?:is|equals?)\\s+(?!(?:(?:[a-z]{2,32}ly)\\s+){0,3}(?:not|never|no|none|unset|missing|absent)\\b)\\S+"
+    - >-
+      (?ix)
+      (?:\b|_)
+      (?:api[_-]?key|secret[_-]?(?:access[_-]?)?key|password|(?:access[_-]?)?token|dbpassword|clientsecret|secret)
+      (?:
+        [_-]
+        (?!(?:file|path|policy|budget|rotation|ttl|expiry|expiration|status|format|documentation|santa|days?)(?:[_-]|\b))
+        [a-z0-9]{1,32}
+      ){0,4}
+      (?:
+        \s*(?::|=)\s*\S+
+        |
+        \s+(?:is|equals?)\s+
+        (?!(?:(?:currently|definitely|generally|normally|really|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|unset|missing|absent))(?=\s|$|[.,;!?]))
+        \S+
+      )
+    - >-
+      (?ix)
+      \b(?:api[\s_-]+key|password|token|secret(?:\s+key)?)
+      (?:['’]s)?
+      (?:\s+(?:current\s+value|value|currently|definitely|generally|normally|really|temporarily)){0,3}
+      (?:\s+for\s+(?:the\s+)?[a-z0-9_.-]{1,64}(?:\s+(?:environment|env|account|tenant|workspace|cluster|service|application|app|database|db|region)){0,2})?
+      (?:\s+(?:current\s+value|value|currently|definitely|generally|normally|really|temporarily)){0,3}
+      \s+(?:is|equals?)\s+
+      (?!(?:(?:currently|definitely|generally|normally|really|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|unset|missing|absent))(?=\s|$|[.,;!?]))
+      \S+
     - "(?i)(?:\\bauthorization\\s*:\\s*)?\\bbearer\\s+(?:token\\s+)?(?!(?:tokens?|authentication|authorization|credentials?|policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation|is|are|was|were|should|must|can|means|represents|uses?)\\b)[a-z0-9._~+/=-]+"
     - "(?i)-----BEGIN (?:(?:ENCRYPTED|RSA|EC|OPENSSH|DSA) PRIVATE KEY|PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----"
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
