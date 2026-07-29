@@ -55,6 +55,12 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
         "SECRET_KEY=synthetic-value",
         "clientSecret=synthetic-value",
         "access_token: synthetic-value",
+        "the API   key is SYNTHETIC_VALUE",
+        "my password definitely really is SYNTHETIC_VALUE",
+        "Bearer token SYNTHETIC_BEARER_MARKER",
+        "Authorization: Bearer SYNTHETIC_BEARER_MARKER",
+        "AWS_SECRET_ACCESS_KEY=SYNTHETIC_AWS_MARKER",
+        "-----BEGIN PRIVATE KEY-----\nSYNTHETIC_PRIVATE_KEY_MARKER",
     ],
 )
 def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
@@ -68,6 +74,22 @@ def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
     assert decision.disposition == "block"
     assert decision.model == ""
     assert decision.candidates == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["API key rotation is scheduled", "token budget is 1000"],
+)
+def test_benign_security_and_token_budget_prose_stays_normal(tmp_path, text):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "provider/cloud"
+        config["model_egress"] = {"provider/cloud": "external"}
+
+    decision = configured_router(tmp_path, configure).classify(text)
+
+    assert decision.sensitivity == "normal"
+    assert decision.model == "provider/cloud"
+    assert decision.egress == "external"
 
 
 def test_sensitive_model_without_explicit_local_egress_fails_closed(tmp_path):
@@ -221,6 +243,18 @@ def test_role_cues_match_tokens_and_regular_inflections_not_embedded_words():
 @pytest.mark.parametrize("text", ["refactor", "refactors", "refactored", "refactoring"])
 def test_shipped_refactor_cue_matches_regular_inflections(text):
     assert HybridRouter().classify_role(text) == "coding"
+
+
+@pytest.mark.parametrize(
+    ("text", "role"),
+    [
+        ("writing a blog", "creative"),
+        ("drafting an article", "creative"),
+        ("searching for sources", "research"),
+    ],
+)
+def test_multiword_role_cues_inflect_the_semantic_verb(text, role):
+    assert HybridRouter().classify_role(text) == role
 
 
 def test_every_shipped_exact_role_cue_routes_to_its_owning_role():
@@ -544,8 +578,14 @@ def test_status_reports_unique_active_sensitivity_pattern_count(tmp_path):
     status = router.get_status()
 
     active_patterns = {pattern.pattern for pattern in router._compiled_sensitive}
-    assert status["sensitivity"]["pattern_count"] == len(active_patterns) == 5
-    assert len(router._compiled_sensitive) == 5
+    baseline_router = HybridRouter()
+    baseline_router.get_status()
+    baseline_patterns = {
+        pattern.pattern for pattern in baseline_router._compiled_sensitive
+    }
+    assert status["sensitivity"]["pattern_count"] == len(active_patterns)
+    assert active_patterns == baseline_patterns | {r"custom-secret=\S+"}
+    assert len(router._compiled_sensitive) == len(baseline_patterns) + 1
 
 
 def test_status_reports_effective_model_egress_and_sensitive_readiness(tmp_path):

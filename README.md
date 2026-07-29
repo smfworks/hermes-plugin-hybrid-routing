@@ -8,7 +8,7 @@ Every Hermes session has a default model. This plugin adds a deterministic, loca
 
 ### Three Signals
 
-1. **Sensitivity** — configured secret assignments, SSN/card-number formats, and confidentiality markers are classified as sensitive and require an explicitly local-attested model
+1. **Sensitivity** — common secret assignments and credential forms (including bearer tokens and private-key headers), SSN/card-number formats, and confidentiality markers are classified as sensitive and require an explicitly local-attested model
 2. **Role** — coding, research, creative, strategy, vision, or general
 3. **Difficulty** — simple (fast tier), standard (balanced tier), hard (strong tier)
 
@@ -110,7 +110,7 @@ delegation:
 
 Leave any tier or role blank if you do not have a model for it. The router skips blank entries and chooses the nearest configured capability fallback. It never invents an unconfigured model. Normal models omitted from `model_egress` still route but are reported as `unknown`. A sensitive model must have an exact `local` entry or the decision fails closed.
 
-Bundled secret assignments, SSN/card-number formats, and confidentiality markers are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline. This heuristic list is not a complete PII or DLP detector.
+Bundled secret assignments, bearer credentials, private-key headers, SSN/card-number formats, and confidentiality markers are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline. This heuristic list is not a complete PII, secret-scanning, or DLP detector.
 
 ### Step 3: Verify
 

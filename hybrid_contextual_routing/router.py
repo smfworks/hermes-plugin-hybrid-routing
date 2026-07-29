@@ -107,6 +107,9 @@ _DOUBLED_FINAL_CONSONANT_WORDS = frozenset(
         "submit",
     }
 )
+_IRREGULAR_WORD_FORMS = {
+    "write": frozenset({"write", "writes", "wrote", "written", "writing"}),
+}
 
 
 def _compile_patterns(patterns, field_name: str, flags: int = 0) -> list[re.Pattern]:
@@ -130,7 +133,10 @@ def _nonnegative_int(value, field_name: str) -> int:
 
 
 def _regular_word_forms(word: str) -> set[str]:
-    """Return conservative regular inflections for a cue's final word."""
+    """Return conservative reviewed inflections for a cue word."""
+    irregular = _IRREGULAR_WORD_FORMS.get(word.lower())
+    if irregular is not None:
+        return set(irregular)
     forms = {word}
     if len(word) < 3:
         return forms
@@ -166,11 +172,14 @@ def _regular_word_forms(word: str) -> set[str]:
 
 def _compile_role_cue(cue: str) -> re.Pattern:
     """Compile a literal role cue with token boundaries and inflections."""
-    match = re.fullmatch(r"(.*?)([A-Za-z]+)", cue)
     forms = {cue}
-    if match:
-        prefix, final_word = match.groups()
-        forms = {prefix + form for form in _regular_word_forms(final_word)}
+    words = list(re.finditer(r"[A-Za-z]+", cue))
+    if words:
+        for index in {0, len(words) - 1}:
+            match = words[index]
+            word = match.group(0)
+            for inflection in _regular_word_forms(word):
+                forms.add(cue[: match.start()] + inflection + cue[match.end() :])
     alternatives = "|".join(
         re.escape(form) for form in sorted(forms, key=len, reverse=True)
     )

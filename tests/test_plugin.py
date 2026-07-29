@@ -100,6 +100,53 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
     assert "Separate:   BLOCKED — do not process inline" in output
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "the API   key is SYNTHETIC_VALUE",
+        "my password definitely really is SYNTHETIC_VALUE",
+        "Bearer token SYNTHETIC_BEARER_MARKER",
+        "Authorization: Bearer SYNTHETIC_BEARER_MARKER",
+        "AWS_SECRET_ACCESS_KEY=SYNTHETIC_AWS_MARKER",
+        "-----BEGIN PRIVATE KEY-----\nSYNTHETIC_PRIVATE_KEY_MARKER",
+    ],
+)
+def test_high_value_credential_forms_block_across_public_boundaries(
+    tmp_path, monkeypatch, capsys, text
+):
+    config = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "hybrid_contextual_routing"
+            / "data"
+            / "routing_config.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    config["tiers"]["balanced"]["model"] = "provider/cloud"
+    config["model_egress"] = {"provider/cloud": "external"}
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(
+        plugin,
+        "_get_router",
+        lambda: plugin.HybridRouter(config_path=str(config_path)),
+    )
+
+    tool_result = json.loads(plugin.handle_route_classify({"text": text}))
+    slash_result = plugin.handle_route_command(text)
+    exit_code = plugin.handle_cli_route([text])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["sensitivity"] == "sensitive"
+    assert tool_result["disposition"] == "block"
+    assert tool_result["model"] == ""
+    assert tool_result["candidates"] == []
+    assert "• **Disposition:** `block`" in slash_result
+    assert exit_code == 0
+    assert "Sensitivity: sensitive" in cli_output
+    assert "Disposition: block" in cli_output
+
+
 def test_cli_status_renders_blank_models_with_em_dash(monkeypatch, capsys):
     monkeypatch.setattr(plugin, "_get_router", plugin.HybridRouter)
 
@@ -181,6 +228,30 @@ def test_specific_role_phrase_wins_across_tool_slash_and_cli(
     assert exit_code == 0
     assert "Role:       strategy" in cli_output
     assert "Model:      provider/strategy" in cli_output
+
+
+@pytest.mark.parametrize(
+    ("text", "role"),
+    [
+        ("writing a blog", "creative"),
+        ("drafting an article", "creative"),
+        ("searching for sources", "research"),
+    ],
+)
+def test_multiword_cue_inflections_match_across_tool_slash_and_cli(
+    monkeypatch, capsys, text, role
+):
+    monkeypatch.setattr(plugin, "_get_router", plugin.HybridRouter)
+
+    tool_result = json.loads(plugin.handle_route_classify({"text": text}))
+    slash_result = plugin.handle_route_command(text)
+    exit_code = plugin.handle_cli_route([text])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["role"] == role
+    assert f"• **Role:** `{role}`" in slash_result
+    assert exit_code == 0
+    assert f"Role:       {role}" in cli_output
 
 
 def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):

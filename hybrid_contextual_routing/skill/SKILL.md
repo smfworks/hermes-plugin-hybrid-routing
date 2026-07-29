@@ -84,7 +84,7 @@ Difficulty:
   hard     -> strong, then balanced, then fast
 ```
 
-Blank model refs are skipped. The router never inserts an unconfigured built-in model. Missing or empty `sensitivity.patterns` is rejected rather than disabling sensitive-data detection. Bundled sensitivity patterns remain enforced; configured patterns are additive.
+Blank model refs are skipped. The router never inserts an unconfigured built-in model. Missing or empty `sensitivity.patterns` is rejected rather than disabling configured classification. Bundled patterns cover common secret assignments, bearer credentials, private-key headers, SSN/card-number formats, and confidentiality markers; they are not a complete DLP detector. Configured patterns are additive.
 
 Configure egress centrally by exact ref:
 
