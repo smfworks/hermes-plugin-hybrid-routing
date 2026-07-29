@@ -71,12 +71,16 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
     tool_result = json.loads(
         plugin.handle_route_classify({"text": "password=private-value"})
     )
+    slash_status = plugin.handle_route_command("")
     slash_result = plugin.handle_route_command("password=private-value")
     exit_code = plugin.handle_cli_route(["password=private-value"])
     output = capsys.readouterr().out
 
     assert tool_result["disposition"] == "block"
     assert tool_result["should_delegate"] is False
+    assert "**Migration action:**" in slash_status
+    assert "exact sensitive model ref" in slash_status
+    assert "after verifying its endpoint" in slash_status
     assert "• **Disposition:** `block`" in slash_result
     assert (
         "• **Separate execution:** **BLOCKED — do not process inline**" in slash_result

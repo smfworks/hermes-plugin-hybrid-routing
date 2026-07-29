@@ -260,6 +260,12 @@ def handle_route_command(args: str, **kwargs) -> str:
                 "yes" if egress_metadata.get("sensitive_migration_required") else "no"
             )
             lines.append(f"**Sensitive migration required:** {migration}")
+            if migration == "yes":
+                lines.append(
+                    "**Migration action:** retain `egress_schema_version: 1` and "
+                    "add the exact sensitive model ref to `model_egress` as "
+                    "`local` only after verifying its endpoint."
+                )
             lines.append(
                 f"**Config:** {_markdown_code(status.get('config_path', '—'))}"
             )
@@ -395,6 +401,12 @@ def handle_cli_route(args) -> int:
                 f"(supported {egress_metadata.get('supported_schema_version', 1)})"
             )
             print(f"  migration      → {migration}")
+            if migration == "required":
+                print(
+                    "  action         → retain egress_schema_version: 1 and add "
+                    "the exact sensitive model ref as local only after verifying "
+                    "its endpoint"
+                )
             print()
             deleg = status.get("delegation", {})
             print("DELEGATION:")
