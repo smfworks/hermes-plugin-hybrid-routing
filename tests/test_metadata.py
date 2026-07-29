@@ -103,7 +103,7 @@ def test_readme_uses_distribution_safe_trust_link_and_scoped_sensitivity_claims(
 
     assert (
         "https://github.com/smfworks/hermes-plugin-hybrid-routing/"
-        "blob/main/docs/EGRESS-TRUST-MODEL.md"
+        "blob/v1.1.0/docs/EGRESS-TRUST-MODEL.md"
     ) in readme
     assert "](docs/EGRESS-TRUST-MODEL.md)" not in readme
     assert "secrets, PII, and confidentiality markers" not in readme

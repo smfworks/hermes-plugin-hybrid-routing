@@ -24,7 +24,7 @@ All notable changes to this project are documented here.
 - Match custom sensitivity patterns case-insensitively.
 - Preserve bundled sensitivity detectors as a non-removable baseline when custom patterns are configured.
 - Detect natural-language secret assignments such as `password is ...` and `API key is ...`, not only colon/equal-sign forms.
-- Detect qualified credential variables, bounded scoped/possessive/adverbial assignments, bearer credentials, AWS secret-access assignments, private-key headers, and normal `MIP:` markers while keeping policy, token-budget, passwordless, and file/path-pointer prose normal.
+- Detect deployment/region-qualified credential variables, bounded scoped/possessive/adverbial assignments, bearer credentials, AWS secret-access assignments, private-key headers, and normal `MIP:` markers while keeping policy, budget, rotation, status, passwordless, file/path-pointer, and negated state prose normal.
 - Give the longest matched role cue precedence over multiple shorter matches.
 - Keep the project, source-directory, installed-entry-point, and module plugin descriptions identical.
 - Use the canonical absolute Clearinghouse URL for the linked routing article in the announcement.

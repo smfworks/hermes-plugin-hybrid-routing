@@ -109,6 +109,10 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
         "API key for staging is SYNTHETIC_NATURAL_MARKER",
         "password's value is SYNTHETIC_POSSESSIVE_MARKER",
         "my password definitely really is SYNTHETIC_VALUE",
+        "my password normally is SYNTHETIC_ADVERB_MARKER",
+        "the API key generally is SYNTHETIC_ADVERB_MARKER",
+        "the token temporarily is SYNTHETIC_ADVERB_MARKER",
+        "API key for staging environment is SYNTHETIC_SCOPED_MARKER",
         "Bearer token SYNTHETIC_BEARER_MARKER",
         "Authorization: Bearer SYNTHETIC_BEARER_MARKER",
         "AWS_SECRET_ACCESS_KEY=SYNTHETIC_AWS_MARKER",
@@ -152,6 +156,56 @@ def test_high_value_credential_forms_block_across_public_boundaries(
     assert exit_code == 0
     assert "Sensitivity: sensitive" in cli_output
     assert "Disposition: block" in cli_output
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "TOKEN_BUDGET=1000",
+        "PASSWORD_POLICY=strict",
+        "TOKEN_ROTATION=scheduled",
+        "PASSWORD_EXPIRY=tomorrow",
+        "TOKEN_STATUS=active",
+        "PASSWORD_FILE=/run/secrets/service-password",
+        "ACCESS_TOKEN_PATH=/run/secrets/service-token",
+        "the password for staging is not stored",
+        "the API key for production is never logged",
+        "the token for service is currently not stored",
+    ],
+)
+def test_noncredential_security_forms_stay_normal_across_public_boundaries(
+    tmp_path, monkeypatch, capsys, text
+):
+    config = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "hybrid_contextual_routing"
+            / "data"
+            / "routing_config.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    for tier in config["tiers"].values():
+        tier["model"] = "provider/cloud"
+    config["model_egress"] = {"provider/cloud": "external"}
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(
+        plugin,
+        "_get_router",
+        lambda: plugin.HybridRouter(config_path=str(config_path)),
+    )
+
+    tool_result = json.loads(plugin.handle_route_classify({"text": text}))
+    slash_result = plugin.handle_route_command(text)
+    exit_code = plugin.handle_cli_route([text])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["sensitivity"] == "normal"
+    assert tool_result["disposition"] in {"inline", "separate"}
+    assert tool_result["model"] == "provider/cloud"
+    assert "• **Sensitivity:** `normal`" in slash_result
+    assert exit_code == 0
+    assert "Sensitivity: normal" in cli_output
 
 
 def test_cli_status_renders_blank_models_with_em_dash(monkeypatch, capsys):
