@@ -108,8 +108,53 @@ _DOUBLED_FINAL_CONSONANT_WORDS = frozenset(
     }
 )
 _IRREGULAR_WORD_FORMS = {
+    "find": frozenset({"find", "finds", "found", "finding"}),
     "write": frozenset({"write", "writes", "wrote", "written", "writing"}),
 }
+_FULL_INFLECTION_CUE_WORDS = frozenset(
+    {
+        "benchmark",
+        "code",
+        "compare",
+        "debug",
+        "draft",
+        "evaluate",
+        "find",
+        "import",
+        "prioritize",
+        "refactor",
+        "research",
+        "roadmap",
+        "search",
+        "study",
+        "survey",
+        "test",
+        "tweet",
+        "write",
+    }
+)
+_PLURAL_ONLY_CUE_WORDS = frozenset(
+    {
+        "analysis",
+        "bug",
+        "class",
+        "commit",
+        "decision",
+        "direction",
+        "endpoint",
+        "function",
+        "narrative",
+        "paper",
+        "plan",
+        "post",
+        "request",
+        "story",
+        "strategy",
+        "thread",
+        "trace",
+        "vision",
+    }
+)
 
 
 def _compile_patterns(patterns, field_name: str, flags: int = 0) -> list[re.Pattern]:
@@ -170,15 +215,34 @@ def _regular_word_forms(word: str) -> set[str]:
     return forms
 
 
+def _plural_word_forms(word: str) -> set[str]:
+    """Return the literal word and its conservative noun plural."""
+    lowered = word.lower()
+    if lowered == "analysis":
+        return {word, word[:-2] + "es"}
+    if re.search(r"[^aeiou]y$", lowered):
+        return {word, word[:-1] + "ies"}
+    if lowered.endswith(("s", "x", "z", "ch", "sh")):
+        return {word, word + "es"}
+    return {word, word + "s"}
+
+
 def _compile_role_cue(cue: str) -> re.Pattern:
-    """Compile a literal role cue with token boundaries and inflections."""
+    """Compile a literal cue with token boundaries and reviewed inflections."""
     forms = {cue}
     words = list(re.finditer(r"[A-Za-z]+", cue))
     if words:
         for index in {0, len(words) - 1}:
             match = words[index]
             word = match.group(0)
-            for inflection in _regular_word_forms(word):
+            lowered = word.lower()
+            if lowered in _FULL_INFLECTION_CUE_WORDS:
+                inflections = _regular_word_forms(word)
+            elif index == len(words) - 1 and lowered in _PLURAL_ONLY_CUE_WORDS:
+                inflections = _plural_word_forms(word)
+            else:
+                inflections = {word}
+            for inflection in inflections:
                 forms.add(cue[: match.start()] + inflection + cue[match.end() :])
     alternatives = "|".join(
         re.escape(form) for form in sorted(forms, key=len, reverse=True)
@@ -734,9 +798,10 @@ class HybridRouter:
                     sensitivity=sensitivity,
                     should_delegate=False,
                     reason=(
-                        "Sensitive content detected, but the configured local-only "
-                        "model is not explicitly classified as local in "
-                        "model_egress. No route was selected."
+                        "Sensitive content detected, but the configured "
+                        "sensitive-model reference is not explicitly classified as "
+                        "local by an exact operator declaration in model_egress. "
+                        "No route was selected; physical transport is not verified."
                     ),
                     disposition="block",
                     candidates=[],

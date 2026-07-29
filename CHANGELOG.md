@@ -24,12 +24,12 @@ All notable changes to this project are documented here.
 - Match custom sensitivity patterns case-insensitively.
 - Preserve bundled sensitivity detectors as a non-removable baseline when custom patterns are configured.
 - Detect natural-language secret assignments such as `password is ...` and `API key is ...`, not only colon/equal-sign forms.
-- Detect deployment/region-qualified credential variables, bounded scoped/possessive/adverbial assignments, bearer credentials, AWS secret-access assignments, private-key headers, and normal `MIP:` markers while keeping policy, budget, rotation, status, passwordless, file/path-pointer, and negated state prose normal.
+- Detect deployment/region-qualified credential variables, bounded scoped/possessive/current-value/adverbial assignments with `is` or `equals`, bare and token-labeled bearer credentials, AWS secret-access assignments, standard encrypted/DSA/PGP private-key headers, and normal `MIP:` markers while keeping policy, budget, rotation, status, passwordless, file/path-pointer, and negated state prose normal.
 - Give the longest matched role cue precedence over multiple shorter matches.
 - Keep the project, source-directory, installed-entry-point, and module plugin descriptions identical.
 - Use the canonical absolute Clearinghouse URL for the linked routing article in the announcement.
-- Inflect the first semantic token of multiword role cues, including `writing a blog`, `drafting an article`, and `searching for sources`.
-- Label sensitive destinations in runtime output as operator-declared local rather than implying that physical transport locality was verified.
+- Inflect only reviewed verb heads and noun plurals in role cues, including `writing a blog`, `drafting an article`, and `searching for sources`, without treating nouns such as `paper`, `content`, or `class` as arbitrary verbs.
+- Label declared sensitive destinations as operator-declared, label undeclared blocked references as not declared, and state in runtime and trust-model text that physical transport is not verified.
 - Resolve profile configuration through Hermes' authoritative active-home API.
 - Remove a stale package-data declaration and provide an executable package-template copy command.
 - Validate delegation model refs before status output and reject Unicode surrogate refs.

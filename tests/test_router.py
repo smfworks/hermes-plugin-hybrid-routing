@@ -72,6 +72,16 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
         "MIP: material",
         "MIP:",
         "MIP:material",
+        "API_KEY_STAGING is SYNTHETIC_SECRET",
+        "my API-key is SYNTHETIC_SECRET",
+        "my password's current value is SYNTHETIC_SECRET",
+        "Bearer SYNTHETIC_VALUE",
+        "API key for the staging environment is SYNTHETIC_VALUE",
+        "password for the production database is SYNTHETIC_VALUE",
+        "password equals SYNTHETIC_VALUE",
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+        "-----BEGIN DSA PRIVATE KEY-----",
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----",
     ],
 )
 def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
@@ -102,9 +112,17 @@ def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
         "TOKEN_STATUS=active",
         "PASSWORD_FILE=/run/secrets/service-password",
         "ACCESS_TOKEN_PATH=/run/secrets/service-token",
+        "SECRET_SANTA=gift-exchange",
+        "Bearer token policy is documented",
+        "Bearer authentication is documented",
+        "Authorization: Bearer token policy is documented",
+        "API_KEY_STAGING is not stored",
+        "PASSWORD_PROD equals no stored value",
         "the password for staging is not stored",
         "the API key for production is never logged",
         "the token for service is currently not stored",
+        "the password currently is not stored",
+        "the API key for the staging environment is not stored",
     ],
 )
 def test_benign_security_and_token_budget_prose_stays_normal(tmp_path, text):
@@ -132,6 +150,9 @@ def test_sensitive_model_without_explicit_local_egress_fails_closed(tmp_path):
     assert decision.candidates == []
     assert decision.should_delegate is False
     assert "not explicitly classified as local" in decision.reason
+    assert "local-only model" not in decision.reason
+    assert "configured sensitive-model reference" in decision.reason
+    assert "physical transport is not verified" in decision.reason
     assert status["sensitivity"]["local_only_egress"] == "unknown"
     assert status["egress_metadata"]["sensitive_migration_required"] is True
 
@@ -265,6 +286,18 @@ def test_role_cues_match_tokens_and_regular_inflections_not_embedded_words():
     assert router.classify_role("The team is testing the release") == "coding"
     assert router.classify_role("We need unit tests for this module") == "coding"
     assert router.classify_role("The attestation is complete") == "general"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We papered the wall yesterday",
+        "I feel contented with the result",
+        "The antique was classed as fragile",
+    ],
+)
+def test_noun_and_adjective_cues_do_not_gain_verb_inflections(text):
+    assert HybridRouter().classify_role(text) == "general"
 
 
 @pytest.mark.parametrize("text", ["refactor", "refactors", "refactored", "refactoring"])

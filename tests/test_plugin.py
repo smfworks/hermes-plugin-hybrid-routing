@@ -120,6 +120,16 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
         "MIP: material",
         "MIP:",
         "MIP:material",
+        "API_KEY_STAGING is SYNTHETIC_SECRET",
+        "my API-key is SYNTHETIC_SECRET",
+        "my password's current value is SYNTHETIC_SECRET",
+        "Bearer SYNTHETIC_VALUE",
+        "API key for the staging environment is SYNTHETIC_VALUE",
+        "password for the production database is SYNTHETIC_VALUE",
+        "password equals SYNTHETIC_VALUE",
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+        "-----BEGIN DSA PRIVATE KEY-----",
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----",
     ],
 )
 def test_high_value_credential_forms_block_across_public_boundaries(
@@ -168,9 +178,17 @@ def test_high_value_credential_forms_block_across_public_boundaries(
         "TOKEN_STATUS=active",
         "PASSWORD_FILE=/run/secrets/service-password",
         "ACCESS_TOKEN_PATH=/run/secrets/service-token",
+        "SECRET_SANTA=gift-exchange",
+        "Bearer token policy is documented",
+        "Bearer authentication is documented",
+        "Authorization: Bearer token policy is documented",
+        "API_KEY_STAGING is not stored",
+        "PASSWORD_PROD equals no stored value",
         "the password for staging is not stored",
         "the API key for production is never logged",
         "the token for service is currently not stored",
+        "the password currently is not stored",
+        "the API key for the staging environment is not stored",
     ],
 )
 def test_noncredential_security_forms_stay_normal_across_public_boundaries(
@@ -379,6 +397,43 @@ def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
     assert "Egress:    unknown" in cli_decision
     assert "Egress declaration: none" in cli_decision
     assert f"{external_model} [unknown]" in cli_decision
+
+
+def test_status_surfaces_do_not_call_unknown_egress_operator_declared(
+    tmp_path, monkeypatch, capsys
+):
+    config = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "hybrid_contextual_routing"
+            / "data"
+            / "routing_config.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    local_model = "custom:local/private"
+    config["sensitivity"]["local_only_model"] = local_model
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(
+        plugin,
+        "_get_router",
+        lambda: plugin.HybridRouter(config_path=str(config_path)),
+    )
+
+    slash_status = plugin.handle_route_command("")
+    assert (
+        f"`{local_model}` (`unknown`, not declared; transport not verified; blocked)"
+        in slash_status
+    )
+    assert "`unknown`, operator-declared" not in slash_status
+
+    assert plugin.handle_cli_route([]) == 0
+    cli_status = capsys.readouterr().out
+    assert (
+        f"{local_model} [unknown, not declared; transport not verified; blocked]"
+        in cli_status
+    )
+    assert "unknown, operator-declared" not in cli_status
 
 
 def test_status_tool_rejects_noninteger_max_input_tokens(tmp_path, monkeypatch):

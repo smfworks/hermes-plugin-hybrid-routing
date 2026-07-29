@@ -122,3 +122,10 @@ def test_announcement_uses_canonical_absolute_article_url():
         "2026-07-28-hybrid-contextual-model-routing-hermes"
     ) in announcement
     assert "](/blog/" not in announcement
+
+
+def test_trust_model_uses_runtime_operator_attestation_wording():
+    trust_model = (ROOT / "docs" / "EGRESS-TRUST-MODEL.md").read_text(encoding="utf-8")
+
+    assert "local, operator-declared; transport not verified; ready" in trust_model
+    assert "shows `local, ready`" not in trust_model

@@ -75,7 +75,7 @@ sensitivity:
   local_only_model: custom:local-myserver/my-model
 ```
 
-Run `hermes route` and confirm that the sensitive route shows `local, ready`. If it shows `unknown, blocked` or `external, blocked`, the router will fail closed for sensitive classifications.
+Run `hermes route` and confirm that the sensitive route shows `local, operator-declared; transport not verified; ready`. An undeclared ref shows `unknown, not declared; transport not verified; blocked`; an explicitly external ref shows `external, operator-declared; transport not verified; blocked`. Both states fail closed for sensitive classifications.
 
 ## Trust Boundary and Non-Goals
 

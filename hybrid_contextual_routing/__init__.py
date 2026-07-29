@@ -235,11 +235,17 @@ def handle_route_command(args: str, **kwargs) -> str:
             local_only = sensitivity.get("local_only_model") or "—"
             local_egress = sensitivity.get("local_only_egress") or ""
             if local_egress:
+                local_declaration = sensitivity.get("local_only_egress_declaration")
+                declaration_label = (
+                    "operator-declared"
+                    if local_declaration == "operator"
+                    else "not declared"
+                )
                 readiness = (
                     "ready" if sensitivity.get("local_route_ready") else "blocked"
                 )
                 local_suffix = (
-                    f" ({_markdown_code(local_egress)}, operator-declared; "
+                    f" ({_markdown_code(local_egress)}, {declaration_label}; "
                     f"transport not verified; {readiness})"
                 )
             else:
@@ -387,9 +393,15 @@ def handle_cli_route(args) -> int:
             local_only_model = sens.get("local_only_model") or "—"
             local_egress = sens.get("local_only_egress") or ""
             if local_egress:
+                local_declaration = sens.get("local_only_egress_declaration")
+                declaration_label = (
+                    "operator-declared"
+                    if local_declaration == "operator"
+                    else "not declared"
+                )
                 readiness = "ready" if sens.get("local_route_ready") else "blocked"
                 local_suffix = (
-                    f" [{_safe_output_text(local_egress)}, operator-declared; "
+                    f" [{_safe_output_text(local_egress)}, {declaration_label}; "
                     f"transport not verified; {readiness}]"
                 )
             else:
