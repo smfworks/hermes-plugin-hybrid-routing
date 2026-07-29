@@ -51,6 +51,9 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
         "this token value is synthetic-value",
         "OPENAI_API_KEY=synthetic-value",
         "DB_PASSWORD=synthetic-value",
+        "dbPassword=synthetic-value",
+        "SECRET_KEY=synthetic-value",
+        "clientSecret=synthetic-value",
         "access_token: synthetic-value",
     ],
 )
