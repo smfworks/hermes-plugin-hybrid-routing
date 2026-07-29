@@ -149,7 +149,7 @@ model_egress: {}
 sensitivity:
   local_only_model: ""
   patterns:
-    - "(?i)(api[_\\s-]?key|password|token|secret)(?:\\s+\\w+)?\\s*[:=]\\s*\\S+"
+    - "(?i)(?<![A-Za-z0-9])(api[_\\s-]?key|password|token|secret)\\b(?:\\s+\\w+)?\\s*(?::|=|\\bis\\b)\\s*\\S+"
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
     - "\\b(?:\\d[ -]?){13,16}\\b"
     - "(?i)\\b(highly\\s+confidential|confidential|restricted|secret|internal only|mip:)\\b"

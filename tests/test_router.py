@@ -43,6 +43,30 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
     assert "local-only model is not configured" in decision.reason
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "my password is synthetic-value",
+        "the API key is synthetic-value",
+        "this token value is synthetic-value",
+        "OPENAI_API_KEY=synthetic-value",
+        "DB_PASSWORD=synthetic-value",
+        "access_token: synthetic-value",
+    ],
+)
+def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
+    def configure(config):
+        config["tiers"]["balanced"]["model"] = "provider/cloud"
+        config["model_egress"] = {"provider/cloud": "external"}
+
+    decision = configured_router(tmp_path, configure).classify(text)
+
+    assert decision.sensitivity == "sensitive"
+    assert decision.disposition == "block"
+    assert decision.model == ""
+    assert decision.candidates == []
+
+
 def test_sensitive_model_without_explicit_local_egress_fails_closed(tmp_path):
     def configure(config):
         config["sensitivity"]["local_only_model"] = "custom:local/private-model"

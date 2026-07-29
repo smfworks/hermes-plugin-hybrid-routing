@@ -60,6 +60,8 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
         ).read_text(encoding="utf-8")
     )
     config["sensitivity"]["local_only_model"] = "local/private"
+    config["tiers"]["balanced"]["model"] = "provider/cloud"
+    config["model_egress"] = {"provider/cloud": "external"}
     config_path = tmp_path / "routing_config.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     monkeypatch.setattr(
@@ -71,6 +73,9 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
     tool_result = json.loads(
         plugin.handle_route_classify({"text": "password=private-value"})
     )
+    natural_language_result = json.loads(
+        plugin.handle_route_classify({"text": "my password is private-value"})
+    )
     slash_status = plugin.handle_route_command("")
     slash_result = plugin.handle_route_command("password=private-value")
     exit_code = plugin.handle_cli_route(["password=private-value"])
@@ -78,6 +83,10 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
 
     assert tool_result["disposition"] == "block"
     assert tool_result["should_delegate"] is False
+    assert natural_language_result["sensitivity"] == "sensitive"
+    assert natural_language_result["disposition"] == "block"
+    assert natural_language_result["model"] == ""
+    assert natural_language_result["candidates"] == []
     assert "**Migration action:**" in slash_status
     assert "exact sensitive model ref" in slash_status
     assert "after verifying its endpoint" in slash_status
