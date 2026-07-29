@@ -1,7 +1,7 @@
 ---
 name: hybrid-contextual-routing
 description: "Pick a configured model by role, difficulty, sensitivity."
-version: 1.0.1
+version: 1.1.0
 author: SMF Works
 license: MIT
 ---
@@ -32,30 +32,38 @@ The decision contains:
 | Field | Meaning |
 |---|---|
 | `model` | Selected configured `provider/model-id`, or empty when routing fails closed |
-| `candidates` | Ordered configured fallbacks; sensitive decisions contain only the local model |
+| `egress` | Effective `local`, `external`, or derived `unknown` class |
+| `egress_declaration` | `operator` for an exact registry entry, otherwise `none` |
+| `candidates` | Ordered configured model refs retained for compatibility |
+| `candidate_routes` | Ordered refs paired atomically with egress and declaration provenance |
 | `tier` | `fast`, `balanced`, or `strong` |
 | `role` | Detected task category |
 | `difficulty` | `simple`, `standard`, or `hard` |
 | `sensitivity` | `normal` or `sensitive` |
-| `should_delegate` | Recommendation that another execution context is appropriate |
+| `disposition` | Authoritative action: `inline`, `separate`, `block`, or `unavailable` |
+| `should_delegate` | Compatibility Boolean; true only when disposition is `separate` |
 | `reason` | Explanation of the decision |
 
 Model references must contain a non-empty provider and model ID, be no more than 512 characters, and contain no whitespace or terminal-control characters.
 
 ## Act on the Decision
 
-- If `model` is empty, do not invent a model. Report the configuration problem.
-- If `should_delegate` is false, handle the task inline when appropriate.
-- If `should_delegate` is true, use an execution path that can actually select the returned provider/model.
+- If `disposition` is `block`, do not process the sensitive text inline or invent a fallback.
+- If `disposition` is `unavailable`, report the configuration problem.
+- If `disposition` is `inline`, handle the task in the declared primary context when appropriate.
+- If `disposition` is `separate`, use an execution path that can actually select the returned provider/model.
+- Do not infer permission from `should_delegate: false`; that value also accompanies `block`.
 - Do **not** assume standard `delegate_task` can honor the selected model. Hermes subagents inherit the configured delegation model; the tool has no per-call model argument.
 - For recurring or session-scoped work, configure Hermes `delegation.provider` and `delegation.model` before delegating.
 
 ## Privacy Rules
 
 1. Sensitive classification has priority over role and difficulty.
-2. A sensitive decision contains only `sensitivity.local_only_model`.
-3. If that field is blank, routing fails closed with no candidate.
-4. Verify that the configured ref resolves to genuinely local infrastructure.
+2. A sensitive decision contains only `sensitivity.local_only_model` when its exact ref is marked `local` in `model_egress`.
+3. A blank model, missing/mismatched metadata, or an `external` class fails closed with no candidate.
+4. Never infer locality from a provider or model name. Unlisted refs remain visibly `unknown`.
+5. Treat `local` as operator-attested metadata, not network proof. Verify the provider's effective endpoint or `base_url`, proxies, tunnels, and trust boundary.
+6. Sensitive decisions always recommend separate execution; configured primary-model string equality is not verified runtime identity.
 
 > This plugin is not a DLP boundary. Classification is local only after input reaches Hermes; a messaging gateway still transports the text, and a cloud primary may receive it before `route_classify` runs. For strict confidentiality, use the local CLI or another trusted transport before sending the task to an LLM, or use a trusted local primary model.
 
@@ -63,7 +71,7 @@ Model references must contain a non-empty provider and model ID, be no more than
 
 ```text
 Sensitivity:
-  sensitive -> configured local-only model, otherwise fail closed
+  sensitive -> exact local-classified model, otherwise fail closed
   normal    -> continue
 
 Role:
@@ -77,6 +85,20 @@ Difficulty:
 ```
 
 Blank model refs are skipped. The router never inserts an unconfigured built-in model. Missing or empty `sensitivity.patterns` is rejected rather than disabling sensitive-data detection. Bundled sensitivity patterns remain enforced; configured patterns are additive.
+
+Configure egress centrally by exact ref:
+
+```yaml
+egress_schema_version: 1
+model_egress:
+  custom:local-myserver/my-model: local
+  openai-codex/gpt-5.6-sol: external
+
+sensitivity:
+  local_only_model: custom:local-myserver/my-model
+```
+
+Refs omitted from `model_egress` remain usable for normal routing but carry the effective class `unknown`.
 
 ## Configuration
 

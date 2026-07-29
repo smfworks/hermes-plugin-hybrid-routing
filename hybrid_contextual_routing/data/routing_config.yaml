@@ -123,12 +123,29 @@ roles:
     description: "Default — no specific role detected"
     cues: []
 
+# ── Model egress metadata ──────────────────────────────────────────────
+# Exact model refs may be declared "local" or "external". Refs omitted here
+# remain "unknown". The router never infers locality
+# from a provider name or model-id. A "local" value is an operator attestation:
+# keep it aligned with the provider's real endpoint/base_url.
+#
+# Example after verifying the destination:
+# egress_schema_version: 1
+# model_egress:
+#   "custom:local-laguna/poolside/Laguna-S-2.1-NVFP4": local
+#   "ollama-cloud/glm-5.2": external
+#
+# Keep this version marker with copied 1.1+ configurations. A missing marker is
+# treated as a legacy schema and can never authorize a sensitive route.
+egress_schema_version: 1
+model_egress: {}
+
 # ── Sensitivity ────────────────────────────────────────────────────────
 # Bundled patterns are a non-removable safety baseline. Patterns in a copied
 # override are additive and may extend, but never replace, those detectors.
-# Route sensitive content to a local or separate provider.
-# For true local-only, point this at a local inference server.
-# Leave blank to fail closed: sensitive classifications return no route.
+# Sensitive content is routed only when local_only_model exactly matches a ref
+# explicitly marked "local" in model_egress. Otherwise routing fails closed.
+# The metadata is operator-declared; the plugin cannot verify physical transport.
 sensitivity:
   local_only_model: ""
   patterns:

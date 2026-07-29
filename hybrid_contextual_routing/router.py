@@ -20,6 +20,49 @@ from pathlib import Path
 
 import yaml
 
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate and merge mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[object, object]:
+    mapping: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        if key_node.tag == "tag:yaml.org,2002:merge":
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "YAML merge keys are not supported",
+                key_node.start_mark,
+            )
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "YAML mapping keys must be hashable",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "duplicate YAML mapping key",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
 # ── Constants ──────────────────────────────────────────────────────────
 SENSITIVE = "sensitive"
 NORMAL = "normal"
@@ -29,6 +72,9 @@ HARD = "hard"
 TIER_FAST = "fast"
 TIER_BALANCED = "balanced"
 TIER_STRONG = "strong"
+EGRESS_LOCAL = "local"
+EGRESS_EXTERNAL = "external"
+EGRESS_UNKNOWN = "unknown"
 
 _DIFFICULTY_TO_TIER = {
     SIMPLE: TIER_FAST,
@@ -44,6 +90,8 @@ _TIER_FALLBACK_ORDER = {
 
 _MAX_ROLE_CUES = 64
 _MAX_ROLE_CUE_LENGTH = 128
+_EGRESS_CLASSES = frozenset({EGRESS_LOCAL, EGRESS_EXTERNAL})
+_EGRESS_SCHEMA_VERSION = 1
 _DOUBLED_FINAL_CONSONANT_WORDS = frozenset(
     {
         "admit",
@@ -141,7 +189,11 @@ class RoutingDecision:
     sensitivity: str
     should_delegate: bool
     reason: str
+    disposition: str
+    egress: str = ""
+    egress_declaration: str = ""
     candidates: list[str] = field(default_factory=list)
+    candidate_routes: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -154,7 +206,11 @@ class RoutingDecision:
             "sensitivity": self.sensitivity,
             "should_delegate": self.should_delegate,
             "reason": self.reason,
+            "disposition": self.disposition,
+            "egress": self.egress,
+            "egress_declaration": self.egress_declaration,
             "candidates": list(self.candidates),
+            "candidate_routes": [dict(route) for route in self.candidate_routes],
             # Kept for compatibility with the original 1.0 response shape.
             "fallback_chain": list(self.candidates),
         }
@@ -163,7 +219,8 @@ class RoutingDecision:
         return (
             f"RoutingDecision(model={self.model}, tier={self.tier}, "
             f"role={self.role}, difficulty={self.difficulty}, "
-            f"sensitivity={self.sensitivity}, delegate={self.should_delegate})\n"
+            f"sensitivity={self.sensitivity}, disposition={self.disposition}, "
+            f"delegate={self.should_delegate})\n"
             f"  Reason: {self.reason}"
         )
 
@@ -194,6 +251,8 @@ class HybridRouter:
         self._compiled_hard: list[re.Pattern] = []
         self._compiled_simple: list[re.Pattern] = []
         self._compiled_role_cues: dict[str, list[re.Pattern]] = {}
+        self._validated_model_egress: dict[str, str] | None = None
+        self._validated_egress_schema_version: int | None = None
         self._loaded = False
 
     @property
@@ -217,8 +276,17 @@ class HybridRouter:
             raise FileNotFoundError(
                 f"Routing config not found at {path}. Create one using the template."
             )
-        with open(path, encoding="utf-8") as config_file:
-            loaded = yaml.safe_load(config_file) or {}
+        try:
+            with open(path, encoding="utf-8") as config_file:
+                loader = _UniqueKeyLoader(config_file)
+                try:
+                    loaded = loader.get_single_data() or {}
+                finally:
+                    loader.dispose()
+        except yaml.YAMLError as exc:
+            raise ValueError(
+                f"Invalid YAML in routing config at {path}: {exc}"
+            ) from exc
         if not isinstance(loaded, dict):
             raise ValueError(f"Routing config at {path} must contain a YAML mapping")
         return loaded
@@ -346,6 +414,7 @@ class HybridRouter:
                 compiled_cues.append(_compile_role_cue(cue))
             if compiled_cues:
                 self._compiled_role_cues[role_name] = compiled_cues
+        self._model_egress_registry()
         self._local_only_model()
         self._delegation_settings()
         self._loaded = True
@@ -484,6 +553,75 @@ class HybridRouter:
         value = self._section("sensitivity").get("local_only_model", "")
         return self._model_value(value, "sensitivity.local_only_model")
 
+    def _model_egress_registry(self) -> dict[str, str]:
+        """Return validated exact-model egress classes.
+
+        Model references absent from this registry remain explicitly unknown.
+        """
+        if self._validated_model_egress is not None:
+            return self._validated_model_egress
+        schema_version = self._egress_schema_version()
+        raw_registry = self.config.get("model_egress", {})
+        if not isinstance(raw_registry, dict):
+            raise ValueError("model_egress must be a YAML mapping")
+        if schema_version == 0 and raw_registry:
+            raise ValueError(
+                "egress_schema_version must be 1 when model_egress is configured"
+            )
+        validated: dict[str, str] = {}
+        for index, (raw_model, raw_egress) in enumerate(raw_registry.items()):
+            field_name = f"model_egress[{index}]"
+            model = self._model_value(raw_model, f"{field_name}.model")
+            if not model:
+                raise ValueError(f"{field_name}.model must not be empty")
+            if not isinstance(raw_egress, str):
+                raise ValueError(f"{field_name}.egress must be a string")
+            if raw_egress not in _EGRESS_CLASSES:
+                allowed = ", ".join(sorted(_EGRESS_CLASSES))
+                raise ValueError(f"{field_name}.egress must be one of: {allowed}")
+            validated[model] = raw_egress
+        self._validated_model_egress = validated
+        return validated
+
+    def _egress_schema_version(self) -> int:
+        """Return the validated copied-config egress schema version."""
+        if self._validated_egress_schema_version is not None:
+            return self._validated_egress_schema_version
+        raw_version = self.config.get("egress_schema_version", 0)
+        if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+            raise ValueError("egress_schema_version must be the integer 1")
+        if raw_version not in {0, _EGRESS_SCHEMA_VERSION}:
+            raise ValueError(f"egress_schema_version must be {_EGRESS_SCHEMA_VERSION}")
+        self._validated_egress_schema_version = raw_version
+        return raw_version
+
+    def _model_egress(self, model_ref: str) -> str:
+        """Return a model's explicit class or the safe derived unknown state."""
+        return self._model_egress_registry().get(model_ref, EGRESS_UNKNOWN)
+
+    def _egress_declaration(self, model_ref: str) -> str:
+        """Identify whether an egress class came from the operator registry."""
+        return "operator" if model_ref in self._model_egress_registry() else "none"
+
+    def _configured_model_refs(self) -> list[str]:
+        """Return unique configured model refs in deterministic order."""
+        refs: list[str] = []
+        for tier in _TIER_FALLBACK_ORDER:
+            model = self._tier_model(tier)
+            if model and model not in refs:
+                refs.append(model)
+        for role in self._section("roles"):
+            model = self._role_model(role)
+            if model and model not in refs:
+                refs.append(model)
+        local_model = self._local_only_model()
+        if local_model and local_model not in refs:
+            refs.append(local_model)
+        _, _, primary_model = self._delegation_settings()
+        if primary_model and primary_model not in refs:
+            refs.append(primary_model)
+        return refs
+
     def _delegation_settings(self) -> tuple[list[str], bool, str]:
         delegation = self._section("delegation")
         skip_for_tier = delegation.get("skip_for_tier", [])
@@ -544,6 +682,7 @@ class HybridRouter:
                     "$HERMES_HOME/hybrid_routing/"
                     "routing_config.yaml and fill in your model refs."
                 ),
+                disposition=("block" if sensitivity == SENSITIVE else "unavailable"),
                 candidates=[],
             )
 
@@ -566,6 +705,25 @@ class HybridRouter:
                         "not configured. No route was selected to prevent a "
                         "cloud fallback recommendation."
                     ),
+                    disposition="block",
+                    candidates=[],
+                )
+            if self._model_egress(local_model) != EGRESS_LOCAL:
+                return RoutingDecision(
+                    model="",
+                    provider="",
+                    model_id="",
+                    tier=tier,
+                    role=role,
+                    difficulty=difficulty,
+                    sensitivity=sensitivity,
+                    should_delegate=False,
+                    reason=(
+                        "Sensitive content detected, but the configured local-only "
+                        "model is not explicitly classified as local in "
+                        "model_egress. No route was selected."
+                    ),
+                    disposition="block",
                     candidates=[],
                 )
             candidates.append(local_model)
@@ -610,6 +768,7 @@ class HybridRouter:
                             "Models are configured, but none apply to this task. "
                             "No route was selected."
                         ),
+                        disposition="unavailable",
                         candidates=[],
                     )
                 candidates.append(default)
@@ -625,20 +784,31 @@ class HybridRouter:
 
         primary_model = candidates[0]
         provider, model_id = self._resolve_model_ref(primary_model)
+        primary_egress = self._model_egress(primary_model)
+        primary_egress_declaration = self._egress_declaration(primary_model)
+        candidate_routes = [
+            {
+                "model": model,
+                "egress": self._model_egress(model),
+                "egress_declaration": self._egress_declaration(model),
+            }
+            for model in candidates
+        ]
 
         skip_for_tier, skip_if_same, primary_session_model = self._delegation_settings()
         selected_is_primary = bool(primary_session_model) and (
             primary_model == primary_session_model
         )
-        should_delegate = True
-        if skip_if_same and selected_is_primary:
-            should_delegate = False
-            reason += " (handled inline — same as primary model)"
-        elif sensitivity == SENSITIVE:
+        disposition = "separate"
+        if sensitivity == SENSITIVE:
             reason += " (separate execution on the local-only model recommended)"
+        elif skip_if_same and selected_is_primary:
+            disposition = "inline"
+            reason += " (handled inline — same as primary model)"
         elif tier in skip_for_tier and selected_is_primary:
-            should_delegate = False
+            disposition = "inline"
             reason += " (handled inline — tier skip and same as primary model)"
+        should_delegate = disposition == "separate"
 
         return RoutingDecision(
             model=primary_model,
@@ -650,7 +820,11 @@ class HybridRouter:
             sensitivity=sensitivity,
             should_delegate=should_delegate,
             reason=reason,
+            disposition=disposition,
+            egress=primary_egress,
+            egress_declaration=primary_egress_declaration,
             candidates=candidates,
+            candidate_routes=candidate_routes,
         )
 
     def explain(self, text: str) -> dict:
@@ -665,8 +839,13 @@ class HybridRouter:
         tiers_status: dict[str, dict[str, object]] = {}
         for tier_name in _TIER_FALLBACK_ORDER:
             tier_cfg = self._section("tiers")[tier_name]
+            tier_model = self._tier_model(tier_name)
             tier_status: dict[str, object] = {
-                "model": self._tier_model(tier_name) or "",
+                "model": tier_model or "",
+                "egress": self._model_egress(tier_model) if tier_model else "",
+                "egress_declaration": (
+                    self._egress_declaration(tier_model) if tier_model else ""
+                ),
                 "description": self._display_text(
                     tier_cfg.get("description", ""),
                     f"tiers.{tier_name}.description",
@@ -682,8 +861,13 @@ class HybridRouter:
         roles_status = {}
         for raw_role_name, role_cfg in self._section("roles").items():
             role_name = self._identifier_value(raw_role_name, "roles key")
+            role_model = self._role_model(role_name)
             roles_status[role_name] = {
-                "model": self._role_model(role_name) or "",
+                "model": role_model or "",
+                "egress": self._model_egress(role_model) if role_model else "",
+                "egress_declaration": (
+                    self._egress_declaration(role_model) if role_model else ""
+                ),
                 "description": self._display_text(
                     role_cfg.get("description", ""),
                     f"roles.{role_name}.description",
@@ -719,14 +903,62 @@ class HybridRouter:
             "skip_for_tier": skip_for_tier,
             "skip_if_same_as_primary": skip_if_same,
             "primary_model": primary_model,
+            "primary_egress": (
+                self._model_egress(primary_model) if primary_model else ""
+            ),
+            "primary_egress_declaration": (
+                self._egress_declaration(primary_model) if primary_model else ""
+            ),
         }
+        local_only_model = self._local_only_model()
+        local_only_egress = (
+            self._model_egress(local_only_model) if local_only_model else ""
+        )
+        configured_refs = self._configured_model_refs()
+        schema_version = self._egress_schema_version()
+        unknown_models = sorted(
+            model
+            for model in configured_refs
+            if self._model_egress(model) == EGRESS_UNKNOWN
+        )
+        orphan_models = sorted(
+            model
+            for model in self._model_egress_registry()
+            if model not in configured_refs
+        )
         return {
             "configured": self._is_configured(),
             "config_path": str(self.config_path),
+            "model_egress": dict(self._model_egress_registry()),
+            "egress_metadata": {
+                "schema_version": schema_version,
+                "supported_schema_version": _EGRESS_SCHEMA_VERSION,
+                "metadata_complete": not unknown_models and not orphan_models,
+                "unknown_count": len(unknown_models),
+                "unknown_models": unknown_models,
+                "orphan_count": len(orphan_models),
+                "orphan_models": orphan_models,
+                "sensitive_migration_required": bool(
+                    local_only_model
+                    and (
+                        schema_version != _EGRESS_SCHEMA_VERSION
+                        or local_only_egress == EGRESS_UNKNOWN
+                    )
+                ),
+            },
             "tiers": tiers_status,
             "roles": roles_status,
             "sensitivity": {
-                "local_only_model": self._local_only_model(),
+                "local_only_model": local_only_model,
+                "local_only_egress": local_only_egress,
+                "local_only_egress_declaration": (
+                    self._egress_declaration(local_only_model)
+                    if local_only_model
+                    else ""
+                ),
+                "local_route_ready": bool(
+                    local_only_model and local_only_egress == EGRESS_LOCAL
+                ),
                 "pattern_count": len(self._compiled_sensitive),
             },
             "difficulty": difficulty_status,

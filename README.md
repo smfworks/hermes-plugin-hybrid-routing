@@ -8,11 +8,11 @@ Every Hermes session has a default model. This plugin adds a deterministic, loca
 
 ### Three Signals
 
-1. **Sensitivity** — secrets, PII, and confidentiality markers require a configured local-only model
+1. **Sensitivity** — secrets, PII, and confidentiality markers require an explicitly local-classified model
 2. **Role** — coding, research, creative, strategy, vision, or general
 3. **Difficulty** — simple (fast tier), standard (balanced tier), hard (strong tier)
 
-Sensitive classifications fail closed: if no local-only model is configured, the router returns no model and no cloud fallback.
+Sensitive classifications fail closed: the router returns no model and no fallback unless `local_only_model` exactly matches a ref explicitly marked `local` in `model_egress`.
 
 ## Installation
 
@@ -91,8 +91,16 @@ tiers:
   strong:
     model: xai-oauth/grok-4.5
 
+# Exact refs omitted here remain visibly unknown.
+# "local" is an operator attestation; verify the provider's real endpoint.
+egress_schema_version: 1
+model_egress:
+  custom:local-laguna/poolside/Laguna-S-2.1-NVFP4: local
+  ollama-cloud/glm-5.2: external
+  openai-codex/gpt-5.6-sol: external
+  xai-oauth/grok-4.5: external
+
 sensitivity:
-  # This must identify a genuinely local provider/model.
   local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4
 
 delegation:
@@ -100,7 +108,7 @@ delegation:
   primary_model: openai-codex/gpt-5.6-sol
 ```
 
-Leave any tier or role blank if you do not have a model for it. The router skips blank entries and chooses the nearest configured capability fallback. It never invents an unconfigured model.
+Leave any tier or role blank if you do not have a model for it. The router skips blank entries and chooses the nearest configured capability fallback. It never invents an unconfigured model. Normal models omitted from `model_egress` still route but are reported as `unknown`. A sensitive model must have an exact `local` entry or the decision fails closed.
 
 Bundled secret and PII patterns are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline.
 
@@ -142,17 +150,26 @@ route_test()                  — run the classifier test suite
 
 ## Interpreting a Decision
 
-The result includes the selected `model`, ordered `candidates`, classification metadata, a `reason`, and `should_delegate`.
+The result includes the selected `model`, effective `egress`, ordered `candidates`, structured `candidate_routes`, classification metadata, a `reason`, a machine-readable `disposition`, and the compatibility Boolean `should_delegate`. `candidates` and `fallback_chain` remain string lists for compatibility; `candidate_routes` pairs each model with its effective egress class and declaration provenance.
+
+`disposition` is authoritative for orchestration:
+
+- `inline` — the selected route can be handled in the declared primary context.
+- `separate` — use a separate execution path that can select the returned model.
+- `block` — a sensitive route failed closed; do **not** process the text inline.
+- `unavailable` — no actionable model route exists.
 
 Configured model references must use `provider/model-id`, be 512 characters or fewer, and contain no whitespace or terminal-control characters. The router rejects malformed references before returning or displaying them.
 
-`should_delegate` is an **orchestration recommendation**, not an execution guarantee. Hermes' standard `delegate_task` tool does not accept a per-call model; subagents inherit the configured delegation model. To execute a recommendation, the caller must use an orchestration path that can select that provider/model, or configure `delegation.provider` and `delegation.model` for the workload before delegating.
+`should_delegate` remains for 1.0 compatibility and is true only for `separate`. It is false for both `inline` and fail-closed `block`, so consumers must use `disposition` rather than interpreting false as permission to continue. Sensitive actionable decisions always use `separate`; equality with the copied `delegation.primary_model` setting is not treated as authoritative runtime identity. Hermes' standard `delegate_task` tool does not accept a per-call model; subagents inherit the configured delegation model. To execute a recommendation, the caller must use an orchestration path that can select that provider/model, or configure `delegation.provider` and `delegation.model` for the workload before delegating.
 
 ## Privacy Boundary
 
-The classifier code runs locally after input reaches Hermes and does not call an LLM. For sensitive text, the router returns only the configured local-only model and never includes cloud fallbacks. If that model is blank, routing fails closed. A missing or empty `sensitivity.patterns` list is rejected so a partial override cannot silently disable detection.
+The classifier code runs locally after input reaches Hermes and does not call an LLM. For sensitive text, the router returns only `sensitivity.local_only_model` when the exact ref is explicitly classified `local` in `model_egress`. A blank model, absent or mismatched metadata, or an explicit `external` class produces no candidate and no fallback. A missing or empty `sensitivity.patterns` list is rejected so a partial override cannot silently disable detection.
 
-This plugin is **not a data-loss-prevention boundary**. A messaging gateway such as Telegram, Discord, or Slack transports the text before Hermes can classify it. A cloud-hosted primary model may likewise receive session text before it calls `route_classify`. For strict confidentiality, classify through the local CLI or another trusted transport before submitting the task to an LLM, or start with a trusted local primary model. Verify that `local_only_model` actually resolves to local infrastructure.
+`local` is operator-attested metadata, not network attestation. The plugin does not infer trust from a provider prefix and cannot verify every provider's effective `base_url`, proxy, tunnel, DNS resolution, or transport. Verify the real destination before declaring a ref local and re-check it whenever provider configuration changes. See [Egress Trust Model](docs/EGRESS-TRUST-MODEL.md).
+
+This plugin is **not a data-loss-prevention boundary**. A messaging gateway such as Telegram, Discord, or Slack transports the text before Hermes can classify it. A cloud-hosted primary model may likewise receive session text before it calls `route_classify`. For strict confidentiality, classify through the local CLI or another trusted transport before submitting the task to an LLM, or start with a trusted local primary model.
 
 ## Adding a New Role
 
@@ -183,19 +200,26 @@ tiers:
   strong:
     model: xai-oauth/grok-4.5
 
+egress_schema_version: 1
+model_egress:
+  custom:local-laguna/poolside/Laguna-S-2.1-NVFP4: local
+  openai-codex/gpt-5.6-sol: external
+  xai-oauth/grok-4.5: external
+
 sensitivity:
   local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4
 ```
 
-This configuration recommends a local model for fast work and detected sensitive content, while balanced and strong work can use configured cloud models. Sensitive decisions contain no cloud candidates.
+This configuration recommends a local-classified model for fast work and detected sensitive content, while balanced and strong work can use configured external models. Sensitive decisions contain only the exact local-classified model.
 
 ## How It Works
 
 1. A user or agent invokes `/route`, `hermes route`, or `route_classify`.
 2. The local rules classify sensitivity, role, and difficulty.
-3. The router validates model refs, filters blank fields, and builds an ordered candidate list.
-4. Sensitive classifications either select the local-only model or fail closed.
-5. The caller decides how to execute the recommendation.
+3. The router validates model refs and the central exact-reference egress registry.
+4. Sensitive classifications select only an explicitly local-classified model or fail closed.
+5. Normal classifications build an ordered candidate list with effective egress metadata; unlisted refs remain `unknown`.
+6. The caller decides how to execute the recommendation.
 
 The primary session remains fixed, which preserves prompt caching. Actual model execution remains the orchestrator's responsibility.
 
@@ -212,6 +236,7 @@ hermes-plugin-hybrid-routing/
 │   ├── data/routing_config.yaml        # blank-model configuration template
 │   └── skill/SKILL.md                  # bundled agent guidance
 ├── tests/
+├── docs/EGRESS-TRUST-MODEL.md        # egress schema, invariants, and limits
 ├── pyproject.toml
 └── README.md
 ```

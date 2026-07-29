@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## 1.0.1 — 2026-07-29
+## 1.1.0 — 2026-07-29
 
 ### Fixed
 
@@ -21,7 +21,6 @@ All notable changes to this project are documented here.
 - Validate malformed YAML sections, regexes, model refs, and thresholds with actionable errors.
 - Reject terminal-control, whitespace, overlong, and structurally incomplete model references.
 - Base inline execution on the effective selected model rather than only the requested difficulty tier.
-- Honor `skip_if_same_as_primary` for sensitive local-only routes.
 - Match custom sensitivity patterns case-insensitively.
 - Preserve bundled secret/PII detectors as a non-removable baseline when custom patterns are configured.
 - Resolve profile configuration through Hermes' authoritative active-home API.
@@ -46,6 +45,13 @@ All notable changes to this project are documented here.
 - Correct the documented tested Hermes runtime version.
 - Return `candidates` in routing JSON while retaining `fallback_chain` for compatibility.
 - Handle malformed tool arguments without raising out of the plugin boundary.
+- Require an exact `model_egress: local` attestation before a sensitive model becomes actionable; missing or external metadata now fails closed.
+- Require `egress_schema_version: 1` for the 1.1 copied-config contract; legacy copies remain usable for ordinary routing but cannot authorize sensitive routing.
+- Add an authoritative `disposition` field so blocked sensitive routes cannot be mistaken for inline permission when `should_delegate` is false.
+- Reject duplicate YAML mapping keys and merge keys before policy compilation.
+- Surface effective egress classes in decisions, candidate routes, status JSON, slash output, and CLI output while retaining the 1.0 string-list fields.
+- Validate the central egress registry and surface unlisted normal models as `unknown` rather than conflating missing metadata with an external declaration.
+- Always recommend separate execution for sensitive decisions instead of trusting configured primary-model string equality as runtime identity.
 
 ### Clarified
 
@@ -53,6 +59,7 @@ All notable changes to this project are documented here.
 - Standard Hermes delegation does not support per-call model selection.
 - Sensitive routing is fail-closed but is not a data-loss-prevention boundary for cloud-primary sessions.
 - Corrected installation template paths and removed the unpublished PyPI installation claim.
+- Documented the egress trust model, migration path, and the distinction between operator-attested metadata and verified physical transport.
 
 ### Quality
 

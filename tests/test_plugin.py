@@ -48,7 +48,7 @@ def test_public_handler_rejects_disabled_sensitivity_patterns(
     assert "sensitivity.patterns must contain at least one pattern" in result["error"]
 
 
-def test_cli_route_separates_sensitivity_label_from_value(
+def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
     tmp_path, monkeypatch, capsys
 ):
     config = yaml.safe_load(
@@ -68,11 +68,23 @@ def test_cli_route_separates_sensitivity_label_from_value(
         lambda: plugin.HybridRouter(config_path=str(config_path)),
     )
 
+    tool_result = json.loads(
+        plugin.handle_route_classify({"text": "password=private-value"})
+    )
+    slash_result = plugin.handle_route_command("password=private-value")
     exit_code = plugin.handle_cli_route(["password=private-value"])
     output = capsys.readouterr().out
 
+    assert tool_result["disposition"] == "block"
+    assert tool_result["should_delegate"] is False
+    assert "• **Disposition:** `block`" in slash_result
+    assert (
+        "• **Separate execution:** **BLOCKED — do not process inline**" in slash_result
+    )
     assert exit_code == 0
     assert "Sensitivity: sensitive" in output
+    assert "Disposition: block" in output
+    assert "Separate:   BLOCKED — do not process inline" in output
 
 
 def test_cli_status_renders_blank_models_with_em_dash(monkeypatch, capsys):
@@ -87,6 +99,64 @@ def test_cli_status_renders_blank_models_with_em_dash(monkeypatch, capsys):
     assert "local_only  → —" in output
     assert "primary model    → —" in output
     assert "→ None" not in output
+
+
+def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
+    config = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "hybrid_contextual_routing"
+            / "data"
+            / "routing_config.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    local_model = "custom:local/private"
+    external_model = "provider/balanced"
+    config["tiers"]["balanced"]["model"] = external_model
+    config["sensitivity"]["local_only_model"] = local_model
+    config["model_egress"] = {local_model: "local"}
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(
+        plugin,
+        "_get_router",
+        lambda: plugin.HybridRouter(config_path=str(config_path)),
+    )
+
+    slash_status = plugin.handle_route_command("")
+    slash_decision = plugin.handle_route_command(
+        "Summarize the quarterly report for leadership"
+    )
+    status_json = json.loads(plugin.handle_route_status({}))
+
+    assert f"`{external_model}` (`unknown`)" in slash_status
+    assert f"`{local_model}` (`local`, ready)" in slash_status
+    assert "**Egress metadata:** incomplete (`1` unknown, `0` orphan)" in slash_status
+    assert "**Egress schema:** `1` (supported `1`)" in slash_status
+    assert "**Sensitive migration required:** no" in slash_status
+    assert "• **Egress:** `unknown`" in slash_decision
+    assert "• **Egress declaration:** `none`" in slash_decision
+    assert f"`{external_model}` (`unknown`)" in slash_decision
+    assert status_json["sensitivity"]["local_route_ready"] is True
+
+    assert plugin.handle_cli_route([]) == 0
+    cli_status = capsys.readouterr().out
+    assert f"{external_model} [unknown]" in cli_status
+    assert f"{local_model} [local, ready]" in cli_status
+    assert "metadata       → incomplete (1 unknown, 0 orphan)" in cli_status
+    assert "schema         → 1 (supported 1)" in cli_status
+    assert "migration      → not required" in cli_status
+
+    assert (
+        plugin.handle_cli_route(
+            ["Summarize", "the", "quarterly", "report", "for", "leadership"]
+        )
+        == 0
+    )
+    cli_decision = capsys.readouterr().out
+    assert "Egress:    unknown" in cli_decision
+    assert "Egress declaration: none" in cli_decision
+    assert f"{external_model} [unknown]" in cli_decision
 
 
 def test_status_tool_rejects_noninteger_max_input_tokens(tmp_path, monkeypatch):
@@ -541,6 +611,6 @@ def test_entrypoint_registration_backfills_manifest_metadata():
     context = Context()
     plugin.register(context)
 
-    assert context.manifest.version == "1.0.1"
+    assert context.manifest.version == plugin.__version__
     assert context.manifest.description.startswith("Contextual model routing")
     assert context.manifest.author == "SMF Works"

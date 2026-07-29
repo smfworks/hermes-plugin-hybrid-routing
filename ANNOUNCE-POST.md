@@ -125,6 +125,13 @@ tiers:
   strong:
     model: xai-oauth/grok-4.5
 
+egress_schema_version: 1
+model_egress:
+  custom:local-laguna/poolside/Laguna-S-2.1-NVFP4: local
+  ollama-cloud/glm-5.2: external
+  openai-codex/gpt-5.6-sol: external
+  xai-oauth/grok-4.5: external
+
 sensitivity:
   local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4
 
@@ -159,8 +166,15 @@ roles:
   creative:
     model: ollama-cloud/glm-5.2                               # cloud, inexpensive
 
+egress_schema_version: 1
+model_egress:
+  custom:local-laguna/poolside/Laguna-S-2.1-NVFP4: local
+  openai-codex/gpt-5.6-sol: external
+  xai-oauth/grok-4.5: external
+  ollama-cloud/glm-5.2: external
+
 sensitivity:
-  local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4  # sensitive stays local
+  local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4
 ```
 
 This gives you:
@@ -168,7 +182,7 @@ This gives you:
 - **Balanced work** → cloud model, per-token
 - **Deep reasoning** → cloud frontier model, per-token
 - **Creative writing** → cloud model optimized for content
-- **Sensitive classifications** → recommend the configured local-only model with no cloud fallback
+- **Sensitive classifications** → recommend only the exact model explicitly classified `local`; otherwise fail closed
 
 ## Plugin Structure
 
@@ -194,6 +208,8 @@ The router is advisory, not automatic. It does not hook every turn or force a mo
 That distinction matters. Hermes' standard `delegate_task` tool does not accept a per-call model; subagents inherit the configured delegation model. A caller must use an execution path that can select the returned provider/model, or preconfigure `delegation.provider` and `delegation.model` for the workload.
 
 The plugin is also not a data-loss-prevention boundary. Classification runs locally only after input reaches Hermes. A messaging gateway still transports the text, and a cloud-primary conversation may send it to that provider before the agent calls the router. For strict confidentiality, classify with the local CLI or another trusted transport, or use a trusted local primary model.
+
+`model_egress` makes the trust decision explicit and centralized; the router never infers locality from a provider-name prefix. Its `local` value is still operator-attested metadata, not network proof. Operators must verify the provider's effective endpoint or `base_url`, proxies, tunnels, and trust boundary.
 
 ## Why a Standalone Plugin, Not Core
 

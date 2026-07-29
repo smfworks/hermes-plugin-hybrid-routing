@@ -16,7 +16,7 @@ from .router import HybridRouter
 
 logger = logging.getLogger(__name__)
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 __description__ = (
     "Contextual model routing for Hermes agents. Classifies tasks by sensitivity, "
     "role, and difficulty, then recommends the right model for the job. Supports "
@@ -208,20 +208,58 @@ def handle_route_command(args: str, **kwargs) -> str:
             lines = ["**Hybrid Contextual Routing — Configuration**", ""]
             lines.append("**Tiers:**")
             for tier_name, tier_cfg in status.get("tiers", {}).items():
+                model = tier_cfg.get("model") or "—"
+                egress = tier_cfg.get("egress") or ""
+                egress_suffix = f" ({_markdown_code(egress)})" if egress else ""
                 lines.append(
                     f"  • {_markdown_code(tier_name)} → "
-                    f"{_markdown_code(tier_cfg.get('model') or '—')}"
+                    f"{_markdown_code(model)}{egress_suffix}"
                 )
             lines.append("")
             lines.append("**Roles:**")
             for role_name, role_cfg in status.get("roles", {}).items():
+                model = role_cfg.get("model") or "—"
+                egress = role_cfg.get("egress") or ""
+                egress_suffix = f" ({_markdown_code(egress)})" if egress else ""
                 lines.append(
                     f"  • {_markdown_code(role_name)} → "
-                    f"{_markdown_code(role_cfg.get('model') or '—')}"
+                    f"{_markdown_code(model)}{egress_suffix}"
                 )
             lines.append("")
-            local_only = status.get("sensitivity", {}).get("local_only_model") or "—"
-            lines.append(f"**Sensitive local-only:** {_markdown_code(local_only)}")
+            sensitivity = status.get("sensitivity", {})
+            local_only = sensitivity.get("local_only_model") or "—"
+            local_egress = sensitivity.get("local_only_egress") or ""
+            if local_egress:
+                readiness = (
+                    "ready" if sensitivity.get("local_route_ready") else "blocked"
+                )
+                local_suffix = f" ({_markdown_code(local_egress)}, {readiness})"
+            else:
+                local_suffix = ""
+            lines.append(
+                f"**Sensitive local-only:** {_markdown_code(local_only)}{local_suffix}"
+            )
+            egress_metadata = status.get("egress_metadata", {})
+            completeness = (
+                "complete" if egress_metadata.get("metadata_complete") else "incomplete"
+            )
+            unknown_count = egress_metadata.get("unknown_count", 0)
+            orphan_count = egress_metadata.get("orphan_count", 0)
+            lines.append(
+                f"**Egress metadata:** {completeness} "
+                f"({_markdown_code(unknown_count)} unknown, "
+                f"{_markdown_code(orphan_count)} orphan)"
+            )
+            lines.append(
+                f"**Egress schema:** "
+                f"{_markdown_code(egress_metadata.get('schema_version', 0))} "
+                f"(supported "
+                f"{_markdown_code(egress_metadata.get('supported_schema_version', 1))})"
+            )
+            migration = (
+                "yes" if egress_metadata.get("sensitive_migration_required") else "no"
+            )
+            lines.append(f"**Sensitive migration required:** {migration}")
             lines.append(
                 f"**Config:** {_markdown_code(status.get('config_path', '—'))}"
             )
@@ -244,7 +282,12 @@ def handle_route_command(args: str, **kwargs) -> str:
             return "\n".join(lines)
         else:
             decision = router.classify(arg)
-            execution = "RECOMMENDED" if decision.should_delegate else "NOT REQUIRED"
+            execution = {
+                "separate": "**RECOMMENDED**",
+                "inline": "not required",
+                "block": "**BLOCKED — do not process inline**",
+                "unavailable": "**UNAVAILABLE**",
+            }[decision.disposition]
             lines = [
                 "**Routing Decision**",
                 "",
@@ -253,15 +296,22 @@ def handle_route_command(args: str, **kwargs) -> str:
                 f"• **Role:** {_markdown_code(decision.role)}",
                 f"• **Difficulty:** {_markdown_code(decision.difficulty)}",
                 f"• **Sensitivity:** {_markdown_code(decision.sensitivity)}",
+                f"• **Egress:** {_markdown_code(decision.egress or '—')}",
+                f"• **Egress declaration:** "
+                f"{_markdown_code(decision.egress_declaration or 'none')}",
+                f"• **Disposition:** {_markdown_code(decision.disposition)}",
                 f"• **Separate execution:** {execution}",
                 "",
                 f"**Reason:** {_markdown_code(decision.reason)}",
                 "",
                 "**Fallback chain:**",
             ]
-            for i, m in enumerate(decision.candidates):
+            for i, route in enumerate(decision.candidate_routes):
                 label = "primary" if i == 0 else f"fallback {i}"
-                lines.append(f"  {_markdown_code(label)} → {_markdown_code(m)}")
+                lines.append(
+                    f"  {_markdown_code(label)} → {_markdown_code(route['model'])} "
+                    f"({_markdown_code(route['egress'])})"
+                )
             return "\n".join(lines)
     except Exception as e:
         logger.error("route command failed: %s", _safe_output_text(e))
@@ -285,9 +335,12 @@ def handle_cli_route(args) -> int:
             print("TIERS:")
             for tier_name, tier_cfg in status.get("tiers", {}).items():
                 model = tier_cfg.get("model") or "—"
+                egress = tier_cfg.get("egress") or ""
+                egress_suffix = f" [{_safe_output_text(egress)}]" if egress else ""
                 desc = tier_cfg.get("description", "")
                 print(
-                    f"  {_safe_output_text(tier_name):12s} → {_safe_output_text(model)}"
+                    f"  {_safe_output_text(tier_name):12s} → "
+                    f"{_safe_output_text(model)}{egress_suffix}"
                 )
                 if desc:
                     print(f"  {' ':12s}   {_safe_output_text(desc)}")
@@ -295,9 +348,11 @@ def handle_cli_route(args) -> int:
             print("ROLES:")
             for role_name, role_cfg in status.get("roles", {}).items():
                 model = role_cfg.get("model") or "—"
+                egress = role_cfg.get("egress") or ""
                 desc = role_cfg.get("description", "")
                 auxiliary = role_cfg.get("auxiliary", False)
-                marker = " (auxiliary)" if auxiliary else ""
+                marker = f" [{_safe_output_text(egress)}]" if egress else ""
+                marker += " (auxiliary)" if auxiliary else ""
                 print(
                     f"  {_safe_output_text(role_name):12s} → "
                     f"{_safe_output_text(model)}{marker}"
@@ -308,13 +363,50 @@ def handle_cli_route(args) -> int:
             sens = status.get("sensitivity", {})
             print("SENSITIVITY:")
             local_only_model = sens.get("local_only_model") or "—"
-            print(f"  local_only  → {_safe_output_text(local_only_model)}")
+            local_egress = sens.get("local_only_egress") or ""
+            if local_egress:
+                readiness = "ready" if sens.get("local_route_ready") else "blocked"
+                local_suffix = f" [{_safe_output_text(local_egress)}, {readiness}]"
+            else:
+                local_suffix = ""
+            print(
+                f"  local_only  → {_safe_output_text(local_only_model)}{local_suffix}"
+            )
             print(f"  patterns    → {sens.get('pattern_count', 0)} regex rules")
+            print()
+            egress_metadata = status.get("egress_metadata", {})
+            completeness = (
+                "complete" if egress_metadata.get("metadata_complete") else "incomplete"
+            )
+            unknown_count = egress_metadata.get("unknown_count", 0)
+            orphan_count = egress_metadata.get("orphan_count", 0)
+            migration = (
+                "required"
+                if egress_metadata.get("sensitive_migration_required")
+                else "not required"
+            )
+            print("EGRESS METADATA:")
+            print(
+                f"  metadata       → {completeness} "
+                f"({unknown_count} unknown, {orphan_count} orphan)"
+            )
+            print(
+                f"  schema         → {egress_metadata.get('schema_version', 0)} "
+                f"(supported {egress_metadata.get('supported_schema_version', 1)})"
+            )
+            print(f"  migration      → {migration}")
             print()
             deleg = status.get("delegation", {})
             print("DELEGATION:")
             primary_model = deleg.get("primary_model") or "—"
-            print(f"  primary model    → {_safe_output_text(primary_model)}")
+            primary_egress = deleg.get("primary_egress") or ""
+            primary_suffix = (
+                f" [{_safe_output_text(primary_egress)}]" if primary_egress else ""
+            )
+            print(
+                f"  primary model    → {_safe_output_text(primary_model)}"
+                f"{primary_suffix}"
+            )
             print(f"  skip for tiers   → {deleg.get('skip_for_tier', [])}")
             print(f"  skip if same     → {deleg.get('skip_if_same_as_primary', True)}")
             print()
@@ -362,16 +454,24 @@ def handle_cli_route(args) -> int:
             print(f"  Role:       {decision.role}")
             print(f"  Difficulty: {decision.difficulty}")
             print(f"  Sensitivity: {decision.sensitivity}")
+            print(f"  Egress:    {decision.egress or '—'}")
+            print(f"  Egress declaration: {decision.egress_declaration or 'none'}")
+            print(f"  Disposition: {decision.disposition}")
             print()
-            execution = "RECOMMENDED" if decision.should_delegate else "NOT REQUIRED"
-            print(f"  Separate execution: {execution}")
+            execution = {
+                "separate": "RECOMMENDED",
+                "inline": "not required",
+                "block": "BLOCKED — do not process inline",
+                "unavailable": "UNAVAILABLE",
+            }[decision.disposition]
+            print(f"  Separate:   {execution}")
             print()
             print(f"  Reason:     {_safe_output_text(decision.reason)}")
             print()
             print("  Fallback chain:")
-            for i, m in enumerate(decision.candidates):
+            for i, route in enumerate(decision.candidate_routes):
                 marker = "primary" if i == 0 else f"fallback {i}"
-                print(f"    {marker:12s} → {m}")
+                print(f"    {marker:12s} → {route['model']} [{route['egress']}]")
             print()
         return 0
     except Exception as e:

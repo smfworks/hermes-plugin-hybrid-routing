@@ -38,7 +38,26 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
     assert decision.model == ""
     assert decision.candidates == []
     assert decision.should_delegate is False
+    assert decision.disposition == "block"
+    assert decision.to_dict()["disposition"] == "block"
     assert "local-only model is not configured" in decision.reason
+
+
+def test_sensitive_model_without_explicit_local_egress_fails_closed(tmp_path):
+    def configure(config):
+        config["sensitivity"]["local_only_model"] = "custom:local/private-model"
+
+    router = configured_router(tmp_path, configure)
+    decision = router.classify("password=private-value")
+    status = router.get_status()
+
+    assert decision.sensitivity == "sensitive"
+    assert decision.model == ""
+    assert decision.candidates == []
+    assert decision.should_delegate is False
+    assert "not explicitly classified as local" in decision.reason
+    assert status["sensitivity"]["local_only_egress"] == "unknown"
+    assert status["egress_metadata"]["sensitive_migration_required"] is True
 
 
 def test_sensitive_content_has_no_cloud_fallbacks_and_requests_separate_execution(
@@ -49,14 +68,31 @@ def test_sensitive_content_has_no_cloud_fallbacks_and_requests_separate_executio
         config["tiers"]["balanced"]["model"] = "openai-codex/balanced"
         config["tiers"]["strong"]["model"] = "xai-oauth/strong"
         config["sensitivity"]["local_only_model"] = "custom:local/private-model"
+        config["model_egress"] = {
+            "custom:local/private-model": "local",
+            "openai-codex/fast": "external",
+            "openai-codex/balanced": "external",
+            "xai-oauth/strong": "external",
+        }
         config["delegation"]["primary_model"] = "openai-codex/primary"
 
     decision = configured_router(tmp_path, configure).classify("api_key=private-value")
 
     assert decision.model == "custom:local/private-model"
+    assert decision.egress == "local"
+    assert decision.egress_declaration == "operator"
     assert decision.candidates == ["custom:local/private-model"]
+    assert decision.candidate_routes == [
+        {
+            "model": "custom:local/private-model",
+            "egress": "local",
+            "egress_declaration": "operator",
+        }
+    ]
     assert decision.to_dict()["candidates"] == decision.candidates
+    assert decision.to_dict()["candidate_routes"] == decision.candidate_routes
     assert decision.should_delegate is True
+    assert decision.disposition == "separate"
     assert "delegated" not in decision.reason
     assert "separate execution" in decision.reason
 
@@ -72,6 +108,7 @@ def test_blank_config_still_classifies_task_metadata():
     assert decision.difficulty == "hard"
     assert decision.sensitivity == "normal"
     assert decision.should_delegate is False
+    assert decision.disposition == "unavailable"
 
 
 def test_builtin_self_test_validates_classifier_with_blank_models():
@@ -334,6 +371,7 @@ def test_custom_sensitivity_patterns_are_case_insensitive(tmp_path):
     def configure(config):
         config["sensitivity"]["patterns"] = [r"custom-secret=\S+"]
         config["sensitivity"]["local_only_model"] = "local/private"
+        config["model_egress"] = {"local/private": "local"}
         config["tiers"]["balanced"]["model"] = "cloud/standard"
 
     decision = configured_router(tmp_path, configure).classify(
@@ -349,6 +387,7 @@ def test_custom_patterns_cannot_replace_bundled_secret_detectors(tmp_path):
     def configure(config):
         config["sensitivity"]["patterns"] = [r"^CUSTOM_ONLY$"]
         config["sensitivity"]["local_only_model"] = "local/private"
+        config["model_egress"] = {"local/private": "local"}
         config["tiers"]["balanced"]["model"] = "cloud/standard"
 
     router = configured_router(tmp_path, configure)
@@ -466,17 +505,51 @@ def test_status_reports_unique_active_sensitivity_pattern_count(tmp_path):
     assert len(router._compiled_sensitive) == 5
 
 
-def test_sensitive_route_stays_inline_when_local_model_is_primary(tmp_path):
+def test_status_reports_effective_model_egress_and_sensitive_readiness(tmp_path):
+    def configure(config):
+        local_model = "custom:local/private-model"
+        config["tiers"]["fast"]["model"] = local_model
+        config["tiers"]["balanced"]["model"] = "cloud/balanced"
+        config["sensitivity"]["local_only_model"] = local_model
+        config["model_egress"] = {local_model: "local"}
+        config["delegation"]["primary_model"] = "cloud/balanced"
+
+    status = configured_router(tmp_path, configure).get_status()
+
+    assert status["model_egress"] == {"custom:local/private-model": "local"}
+    assert status["tiers"]["fast"]["egress"] == "local"
+    assert status["tiers"]["fast"]["egress_declaration"] == "operator"
+    assert status["tiers"]["balanced"]["egress"] == "unknown"
+    assert status["tiers"]["balanced"]["egress_declaration"] == "none"
+    assert status["roles"]["coding"]["egress"] == ""
+    assert status["sensitivity"]["local_only_egress"] == "local"
+    assert status["sensitivity"]["local_route_ready"] is True
+    assert status["delegation"]["primary_egress"] == "unknown"
+    assert status["egress_metadata"] == {
+        "schema_version": 1,
+        "supported_schema_version": 1,
+        "metadata_complete": False,
+        "unknown_count": 1,
+        "unknown_models": ["cloud/balanced"],
+        "orphan_count": 0,
+        "orphan_models": [],
+        "sensitive_migration_required": False,
+    }
+
+
+def test_sensitive_route_always_requests_separate_execution(tmp_path):
     def configure(config):
         config["sensitivity"]["local_only_model"] = "local/private"
+        config["model_egress"] = {"local/private": "local"}
         config["delegation"]["primary_model"] = "local/private"
         config["delegation"]["skip_if_same_as_primary"] = True
 
     decision = configured_router(tmp_path, configure).classify("password=private-value")
 
     assert decision.model == "local/private"
-    assert decision.should_delegate is False
-    assert "same as primary model" in decision.reason
+    assert decision.should_delegate is True
+    assert "separate execution" in decision.reason
+    assert "same as primary model" not in decision.reason
 
 
 def test_fast_role_override_delegates_when_selected_model_differs_from_primary(
@@ -536,3 +609,154 @@ def test_malformed_or_terminal_unsafe_model_refs_are_rejected(tmp_path, model_re
 
     with pytest.raises(ValueError, match=r"tiers\.balanced\.model"):
         router.classify("Summarize the report for leadership")
+
+
+@pytest.mark.parametrize(
+    ("registry", "error"),
+    [
+        ([], r"model_egress must be a YAML mapping"),
+        ({42: "local"}, r"model_egress\[0\]\.model must be a string"),
+        ({"": "local"}, r"model_egress\[0\]\.model must not be empty"),
+        ({"provider/model": True}, r"model_egress\[0\]\.egress must be a string"),
+        (
+            {"provider/model": "private"},
+            r"model_egress\[0\]\.egress must be one of: external, local",
+        ),
+        (
+            {"not-a-provider-ref": "local"},
+            r"model_egress\[0\]\.model must use a non-empty provider/model reference",
+        ),
+    ],
+)
+def test_model_egress_registry_is_strictly_validated(tmp_path, registry, error):
+    def configure(config):
+        config["model_egress"] = registry
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match=error):
+        router.get_status()
+
+
+def test_sensitive_model_explicitly_marked_external_fails_closed(tmp_path):
+    def configure(config):
+        model = "custom:maybe-local/private-model"
+        config["sensitivity"]["local_only_model"] = model
+        config["model_egress"] = {model: "external"}
+
+    decision = configured_router(tmp_path, configure).classify("token=private-value")
+
+    assert decision.model == ""
+    assert decision.egress == ""
+    assert decision.candidates == []
+    assert decision.candidate_routes == []
+    assert "not explicitly classified as local" in decision.reason
+
+
+def test_sensitive_local_attestation_requires_an_exact_model_ref(tmp_path):
+    def configure(config):
+        config["sensitivity"]["local_only_model"] = "custom:local/model-a"
+        config["model_egress"] = {"custom:local/model-b": "local"}
+
+    decision = configured_router(tmp_path, configure).classify("secret=private-value")
+
+    assert decision.model == ""
+    assert decision.candidates == []
+    assert "not explicitly classified as local" in decision.reason
+
+
+def test_status_reports_orphan_egress_declarations(tmp_path):
+    def configure(config):
+        config["model_egress"] = {"provider/unused": "external"}
+
+    metadata = configured_router(tmp_path, configure).get_status()["egress_metadata"]
+
+    assert metadata["metadata_complete"] is False
+    assert metadata["unknown_count"] == 0
+    assert metadata["orphan_count"] == 1
+    assert metadata["orphan_models"] == ["provider/unused"]
+
+
+def test_normal_same_primary_route_has_inline_disposition(tmp_path):
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "provider/primary"
+        config["delegation"]["primary_model"] = "provider/primary"
+
+    decision = configured_router(tmp_path, configure).classify("hello")
+
+    assert decision.model == "provider/primary"
+    assert decision.disposition == "inline"
+    assert decision.should_delegate is False
+
+
+def test_legacy_egress_config_is_reported_and_sensitive_routing_blocks(tmp_path):
+    def configure(config):
+        config.pop("egress_schema_version", None)
+        config.pop("model_egress", None)
+        config["sensitivity"]["local_only_model"] = "custom:local/private"
+
+    router = configured_router(tmp_path, configure)
+    status = router.get_status()
+    decision = router.classify("password=private-value")
+
+    assert status["egress_metadata"]["schema_version"] == 0
+    assert status["egress_metadata"]["supported_schema_version"] == 1
+    assert status["egress_metadata"]["sensitive_migration_required"] is True
+    assert decision.disposition == "block"
+    assert decision.candidates == []
+
+
+def test_nonempty_egress_registry_requires_schema_version(tmp_path):
+    def configure(config):
+        config.pop("egress_schema_version", None)
+        config["model_egress"] = {"custom:local/private": "local"}
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match="egress_schema_version must be 1"):
+        router.get_status()
+
+
+@pytest.mark.parametrize("schema_version", [True, "1", 2, -1])
+def test_egress_schema_version_is_strictly_validated(tmp_path, schema_version):
+    def configure(config):
+        config["egress_schema_version"] = schema_version
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match="egress_schema_version"):
+        router.get_status()
+
+
+def test_versioned_egress_registry_rejects_null_mapping(tmp_path):
+    def configure(config):
+        config["egress_schema_version"] = 1
+        config["model_egress"] = None
+
+    router = configured_router(tmp_path, configure)
+
+    with pytest.raises(ValueError, match="model_egress must be a YAML mapping"):
+        router.get_status()
+
+
+def test_duplicate_yaml_keys_are_rejected(tmp_path):
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(
+        "egress_schema_version: 1\nmodel_egress: {}\nmodel_egress: {}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate YAML mapping key"):
+        HybridRouter(config_path=config_path).get_status()
+
+
+def test_yaml_merge_keys_are_rejected(tmp_path):
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(
+        "defaults: &defaults\n  provider/model: external\n"
+        "egress_schema_version: 1\nmodel_egress:\n  <<: *defaults\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="YAML merge keys are not supported"):
+        HybridRouter(config_path=config_path).get_status()

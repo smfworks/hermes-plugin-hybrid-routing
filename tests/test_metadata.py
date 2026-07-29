@@ -68,3 +68,14 @@ def test_every_package_data_pattern_matches_a_real_resource():
         assert list(package_dir.glob(pattern)), (
             f"package-data pattern is stale: {pattern}"
         )
+
+
+def test_packaged_default_config_declares_egress_schema_version():
+    config = yaml.safe_load(
+        (ROOT / "hybrid_contextual_routing" / "data" / "routing_config.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert config["egress_schema_version"] == 1
+    assert config["model_egress"] == {}
