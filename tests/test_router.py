@@ -86,6 +86,18 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
         "API_KEY_STRIPE=SYNTHETIC_VALUE",
         "CLIENTSECRET_GITHUB=SYNTHETIC_VALUE",
         "PASSWORD_HASH=SYNTHETIC_VALUE",
+        "API key: SYNTHETIC_VALUE",
+        "API key = SYNTHETIC_VALUE",
+        '{"password": "SYNTHETIC_VALUE"}',
+        '{"api_key":"SYNTHETIC_VALUE"}',
+        "{'access_token': 'SYNTHETIC_VALUE'}",
+        "API_KEY_STG=SYNTHETIC_VALUE",
+        "API_KEY_PRD=SYNTHETIC_VALUE",
+        "TOKEN_DEV2=SYNTHETIC_VALUE",
+        "PASSWORD=none.marker",
+        "TOKEN=null-marker",
+        "API_KEY=not-configured-marker",
+        "API key equals none.marker",
         "my password value is not-a-placeholder",
         "my password value is nevermore",
         "my password value is no-marker",
@@ -95,8 +107,11 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
         "my password value is absent-marker",
         "my password value for staging is SYNTHETIC_VALUE",
         "my password definitely for staging is SYNTHETIC_VALUE",
+        "my password actually is SYNTHETIC_VALUE",
+        "my password securely is SYNTHETIC_VALUE",
         "Bearer policy-marker.SYNTHETIC_VALUE",
         "Bearer token status-marker.SYNTHETIC_VALUE",
+        "Bearer token is-marker.SYNTHETIC_VALUE",
         "Authorization: Bearer documentation-marker.SYNTHETIC_VALUE",
         "Bearer token-marker.SYNTHETIC_VALUE",
         "Bearer authentication-marker.SYNTHETIC_VALUE",
@@ -156,6 +171,9 @@ def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
         "Bearer tokens are credentials",
         "Bearer authorization is documented",
         "Bearer token status is documented",
+        "Bearer token supply is documented",
+        "Bearer token assembly is complete",
+        "Bearer token family is documented",
         "Authorization: Bearer token policy is documented",
         "Authorization: Bearer *** policy is documented",
         "API_KEY_STAGING is not stored",
@@ -171,13 +189,23 @@ def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
         "TOKEN_POLICY=strict",
         "PASSWORD_TTL=3600",
         "ACCESS_TOKEN_EXPIRATION=tomorrow",
+        "PASSWORD=none",
+        "TOKEN=null",
+        "API_KEY=not-configured",
+        "SECRET_KEY=unset",
+        '{"password": null}',
+        '{"api_key":"none"}',
         "my password is not configured",
+        "my password is not currently stored",
+        "my password is never securely logged",
         "my password is never stored",
         "my password is no value",
         "my password is none",
         "my password is unset",
         "my password is missing",
         "my password is absent",
+        "my password is null",
+        "API key equals none.",
     ],
 )
 def test_benign_security_and_token_budget_prose_stays_normal(tmp_path, text):
@@ -338,8 +366,8 @@ def test_role_cues_match_tokens_and_regular_inflections_not_embedded_words():
     router = HybridRouter()
 
     assert router.classify_role("This contest celebrates design") == "general"
-    assert router.classify_role("The team is testing the release") == "coding"
-    assert router.classify_role("We need unit tests for this module") == "coding"
+    assert router.classify_role("The team is refactoring the release") == "coding"
+    assert router.classify_role("We need a unit test for this module") == "coding"
     assert router.classify_role("The attestation is complete") == "general"
 
 
@@ -353,6 +381,45 @@ def test_role_cues_match_tokens_and_regular_inflections_not_embedded_words():
 )
 def test_noun_and_adjective_cues_do_not_gain_verb_inflections(text):
     assert HybridRouter().classify_role(text) == "general"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I found my keys",
+        "These goods were imported yesterday",
+        "The patient tested positive today",
+        "The company imports fruit",
+        "The patient is testing positive today",
+    ],
+)
+def test_ambiguous_role_cues_do_not_gain_generated_inflections(text):
+    assert HybridRouter().classify_role(text) == "general"
+
+
+@pytest.mark.parametrize(
+    ("text", "role"),
+    [("find x", "research"), ("import x", "coding"), ("test x", "coding")],
+)
+def test_ambiguous_role_cues_still_match_exact_literals(text, role):
+    assert HybridRouter().classify_role(text) == role
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Please improve this sentence",
+        "The budget was approved",
+        "Improvements are welcome",
+    ],
+)
+def test_prove_difficulty_cue_does_not_match_embedded_words(text):
+    assert HybridRouter().classify_difficulty(text) != "hard"
+
+
+@pytest.mark.parametrize("text", ["prove it", "proves it", "proved it", "proving it"])
+def test_prove_difficulty_cue_matches_reviewed_word_forms(text):
+    assert HybridRouter().classify_difficulty(text) == "hard"
 
 
 @pytest.mark.parametrize("text", ["refactor", "refactors", "refactored", "refactoring"])

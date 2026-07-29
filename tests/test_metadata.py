@@ -135,3 +135,8 @@ def test_readme_scopes_role_cue_inflections_to_reviewed_words():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "Only shipped and reviewed cue words receive regular inflections" in readme
+    ambiguous_claim = (
+        "Ambiguous cues such as `find`, `import`, and `test` are literal-only"
+    )
+    assert ambiguous_claim in readme
+    assert "such as `refactor`, `refactors`, `refactored`, and `refactoring`" in readme

@@ -192,7 +192,7 @@ roles:
       - "regulation"
 ```
 
-The router picks up the change on the next invocation. No code changes are required. Each role may define up to 64 nonempty literal cues of at most 128 characters. Cue matching is case-insensitive and token-boundary-aware; cues are not regular expressions. Only shipped and reviewed cue words receive regular inflections such as `test`, `tests`, `tested`, and `testing`. Custom cues otherwise match their exact literal words and phrases.
+The router picks up the change on the next invocation. No code changes are required. Each role may define up to 64 nonempty literal cues of at most 128 characters. Cue matching is case-insensitive and token-boundary-aware; cues are not regular expressions. Only shipped and reviewed cue words receive regular inflections, such as `refactor`, `refactors`, `refactored`, and `refactoring`. Ambiguous cues such as `find`, `import`, and `test` are literal-only. Custom cues otherwise match their exact literal words and phrases.
 
 ## Cloud/Local Hybrid Example
 

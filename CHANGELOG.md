@@ -23,12 +23,12 @@ All notable changes to this project are documented here.
 - Base inline execution on the effective selected model rather than only the requested difficulty tier.
 - Match custom sensitivity patterns case-insensitively.
 - Preserve bundled sensitivity detectors as a non-removable baseline when custom patterns are configured.
-- Detect natural-language secret assignments such as `password is ...` and `API key is ...`, not only colon/equal-sign forms.
-- Detect bounded non-metadata-qualified credential variables, scoped/possessive/current-value assignments and reviewed adverbial forms with `is` or `equals`, bare and token-labeled bearer credentials, AWS secret-access assignments, standard encrypted/DSA/PGP private-key headers, and normal `MIP:` markers. Keep complete bearer-policy phrases, policy, budget, rotation, status, passwordless, file/path-pointer, and explicit negated state prose normal without exempting credential values that merely begin with prose- or negation-like text.
+- Detect natural-language, spaced-label, quoted-object-key, colon, and equal-sign secret assignments such as `password is ...`, `API key: ...`, and `{"password": "..."}`.
+- Detect bounded non-metadata-qualified credential variables and generic deployment qualifiers; scoped, possessive, current-value, and reviewed adverbial assignments with `is` or `equals`; bare and token-labeled bearer credentials; AWS secret-access assignments; standard encrypted/DSA/PGP private-key headers; and normal `MIP:` markers. Keep complete bearer-policy and bearer-lifecycle prose, policy, budget, rotation, status, passwordless, file/path-pointer, exact non-value sentinels, and explicit terminal negated state prose normal without exempting credential values that merely begin with those words.
 - Give the longest matched role cue precedence over multiple shorter matches.
 - Keep the project, source-directory, installed-entry-point, and module plugin descriptions identical.
 - Use the canonical absolute Clearinghouse URL for the linked routing article in the announcement.
-- Inflect only reviewed verb heads and noun plurals in role cues, including `writing a blog`, `drafting an article`, and `searching for sources`, without treating nouns such as `paper`, `content`, or `class` as arbitrary verbs.
+- Inflect only reviewed verb heads and noun plurals in role cues, including `writing a blog`, `drafting an article`, and `searching for sources`, without treating nouns such as `paper`, `content`, or `class` as arbitrary verbs; keep ambiguous cues such as `find`, `import`, and `test` literal-only.
 - Label declared sensitive destinations as operator-declared, label undeclared blocked references as not declared, and state in runtime and trust-model text that physical transport is not verified.
 - Resolve profile configuration through Hermes' authoritative active-home API.
 - Remove a stale package-data declaration and provide an executable package-template copy command.
@@ -42,7 +42,7 @@ All notable changes to this project are documented here.
 - Validate delegation skip tiers against the canonical tier set.
 - Code-wrap dynamic slash-command values to neutralize Markdown and mentions.
 - Add explicit slash/CLI `classify <text>` forms so reserved task text such as `test` and `status` remains classifiable.
-- Use a distribution-safe trust-model URL and scope sensitivity claims to the bundled detector classes.
+- Use a distribution-safe canonical `main` trust-model URL and scope sensitivity claims to the bundled detector classes.
 - Use variable-length CommonMark code fences for arbitrary slash-command paths and errors.
 - Escape control-bearing paths, inputs, errors, and other dynamic CLI output.
 - Bound role cues, reject empty values, and match literal cues at token boundaries with regular inflections.

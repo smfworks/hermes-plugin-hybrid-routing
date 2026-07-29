@@ -134,6 +134,18 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
         "API_KEY_STRIPE=SYNTHETIC_VALUE",
         "CLIENTSECRET_GITHUB=SYNTHETIC_VALUE",
         "PASSWORD_HASH=SYNTHETIC_VALUE",
+        "API key: SYNTHETIC_VALUE",
+        "API key = SYNTHETIC_VALUE",
+        '{"password": "SYNTHETIC_VALUE"}',
+        '{"api_key":"SYNTHETIC_VALUE"}',
+        "{'access_token': 'SYNTHETIC_VALUE'}",
+        "API_KEY_STG=SYNTHETIC_VALUE",
+        "API_KEY_PRD=SYNTHETIC_VALUE",
+        "TOKEN_DEV2=SYNTHETIC_VALUE",
+        "PASSWORD=none.marker",
+        "TOKEN=null-marker",
+        "API_KEY=not-configured-marker",
+        "API key equals none.marker",
         "my password value is not-a-placeholder",
         "my password value is nevermore",
         "my password value is no-marker",
@@ -143,8 +155,11 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
         "my password value is absent-marker",
         "my password value for staging is SYNTHETIC_VALUE",
         "my password definitely for staging is SYNTHETIC_VALUE",
+        "my password actually is SYNTHETIC_VALUE",
+        "my password securely is SYNTHETIC_VALUE",
         "Bearer policy-marker.SYNTHETIC_VALUE",
         "Bearer token status-marker.SYNTHETIC_VALUE",
+        "Bearer token is-marker.SYNTHETIC_VALUE",
         "Authorization: Bearer documentation-marker.SYNTHETIC_VALUE",
         "Bearer token-marker.SYNTHETIC_VALUE",
         "Bearer authentication-marker.SYNTHETIC_VALUE",
@@ -222,6 +237,9 @@ def test_high_value_credential_forms_block_across_public_boundaries(
         "Bearer tokens are credentials",
         "Bearer authorization is documented",
         "Bearer token status is documented",
+        "Bearer token supply is documented",
+        "Bearer token assembly is complete",
+        "Bearer token family is documented",
         "Authorization: Bearer token policy is documented",
         "Authorization: Bearer *** policy is documented",
         "API_KEY_STAGING is not stored",
@@ -237,13 +255,23 @@ def test_high_value_credential_forms_block_across_public_boundaries(
         "TOKEN_POLICY=strict",
         "PASSWORD_TTL=3600",
         "ACCESS_TOKEN_EXPIRATION=tomorrow",
+        "PASSWORD=none",
+        "TOKEN=null",
+        "API_KEY=not-configured",
+        "SECRET_KEY=unset",
+        '{"password": null}',
+        '{"api_key":"none"}',
         "my password is not configured",
+        "my password is not currently stored",
+        "my password is never securely logged",
         "my password is never stored",
         "my password is no value",
         "my password is none",
         "my password is unset",
         "my password is missing",
         "my password is absent",
+        "my password is null",
+        "API key equals none.",
     ],
 )
 def test_noncredential_security_forms_stay_normal_across_public_boundaries(
@@ -386,6 +414,56 @@ def test_multiword_cue_inflections_match_across_tool_slash_and_cli(
     assert f"• **Role:** `{role}`" in slash_result
     assert exit_code == 0
     assert f"Role:       {role}" in cli_output
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I found my keys",
+        "These goods were imported yesterday",
+        "The patient tested positive today",
+        "The company imports fruit",
+        "The patient is testing positive today",
+    ],
+)
+def test_ambiguous_role_inflections_stay_general_across_public_boundaries(
+    monkeypatch, capsys, text
+):
+    monkeypatch.setattr(plugin, "_get_router", plugin.HybridRouter)
+
+    tool_result = json.loads(plugin.handle_route_classify({"text": text}))
+    slash_result = plugin.handle_route_command(text)
+    exit_code = plugin.handle_cli_route([text])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["role"] == "general"
+    assert "• **Role:** `general`" in slash_result
+    assert exit_code == 0
+    assert "Role:       general" in cli_output
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Please improve this sentence",
+        "The budget was approved",
+        "Improvements are welcome",
+    ],
+)
+def test_prove_cue_embedded_words_stay_nonhard_across_public_boundaries(
+    monkeypatch, capsys, text
+):
+    monkeypatch.setattr(plugin, "_get_router", plugin.HybridRouter)
+
+    tool_result = json.loads(plugin.handle_route_classify({"text": text}))
+    slash_result = plugin.handle_route_command(text)
+    exit_code = plugin.handle_cli_route([text])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["difficulty"] != "hard"
+    assert "• **Difficulty:** `hard`" not in slash_result
+    assert exit_code == 0
+    assert "Difficulty: hard" not in cli_output
 
 
 def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):

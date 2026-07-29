@@ -108,7 +108,6 @@ _DOUBLED_FINAL_CONSONANT_WORDS = frozenset(
     }
 )
 _IRREGULAR_WORD_FORMS = {
-    "find": frozenset({"find", "finds", "found", "finding"}),
     "write": frozenset({"write", "writes", "wrote", "written", "writing"}),
 }
 _FULL_INFLECTION_CUE_WORDS = frozenset(
@@ -119,8 +118,6 @@ _FULL_INFLECTION_CUE_WORDS = frozenset(
         "debug",
         "draft",
         "evaluate",
-        "find",
-        "import",
         "prioritize",
         "refactor",
         "research",
@@ -128,7 +125,6 @@ _FULL_INFLECTION_CUE_WORDS = frozenset(
         "search",
         "study",
         "survey",
-        "test",
         "tweet",
         "write",
     }

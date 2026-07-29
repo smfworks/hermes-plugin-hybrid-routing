@@ -157,40 +157,45 @@ sensitivity:
     - >-
       (?ix)
       (?:\b|_)
-      (?:api[_-]?key|secret[_-]?(?:access[_-]?)?key|password|(?:access[_-]?)?token|dbpassword|clientsecret|secret)
+      (?:api[\s_-]*key|secret[\s_-]*(?:access[\s_-]*)?key|password|(?:access[\s_-]*)?token|dbpassword|clientsecret|secret)
       (?:
         [_-]
         (?!(?:file|path|policy|budget|rotation|ttl|expiry|expiration|status|format|documentation|santa|days?)(?:[_-]|\b))
         [a-z0-9]{1,32}
       ){0,4}
       (?:
-        \s*(?::|=)\s*\S+
+        ["']?\s*(?::|=)\s*
+        (?:
+          ["'](?!(?:none|null|unset|missing|absent|not[-_\s]+configured)["'](?=\s*(?:[,;}\]]|$)))\S+
+          |
+          (?!["'])(?!(?:none|null|unset|missing|absent|not[-_\s]+configured)(?=\s*(?:[,;}\]]|$)))\S+
+        )
         |
         \s+(?:is|equals?)\s+
-        (?!(?:(?:currently|definitely|generally|normally|really|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|unset|missing|absent))(?=\s|$|[.,;!?]))
+        (?!(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|null|unset|missing|absent))[.,;!?]?(?=\s|$))
         \S+
       )
     - >-
       (?ix)
       \b(?:api[\s_-]+key|password|token|secret(?:\s+key)?)
       (?:['’]s)?
-      (?:\s+(?:current\s+value|value|currently|definitely|generally|normally|really|temporarily)){0,3}
+      (?:\s+(?:current\s+value|value|actually|currently|definitely|generally|normally|really|securely|temporarily)){0,3}
       (?:\s+for\s+(?:the\s+)?[a-z0-9_.-]{1,64}(?:\s+(?:environment|env|account|tenant|workspace|cluster|service|application|app|database|db|region)){0,2})?
-      (?:\s+(?:current\s+value|value|currently|definitely|generally|normally|really|temporarily)){0,3}
+      (?:\s+(?:current\s+value|value|actually|currently|definitely|generally|normally|really|securely|temporarily)){0,3}
       \s+(?:is|equals?)\s+
-      (?!(?:(?:currently|definitely|generally|normally|really|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|unset|missing|absent))(?=\s|$|[.,;!?]))
+      (?!(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|null|unset|missing|absent))[.,;!?]?(?=\s|$))
       \S+
     - >-
       (?ix)
       (?:\bauthorization\s*:\s*)?\bbearer\s+
       (?!
         (?:
-          (?:tokens?|authentication|authorization|credentials?|policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation)
+          (?:tokens?|authentication|authorization|credentials?|policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation|supply|assembly|family)
           \s+(?:is|are|was|were|should|must|can|means|represents|uses?|has|have)
           |
-          token\s+(?:policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation)
+          token\s+(?:policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation|supply|assembly|family)
           \s+(?:is|are|was|were|should|must|can|means|represents|uses?|has|have)
-        )\b
+        )\b(?=\s+[a-z])
       )
       (?:token\s+)?[a-z0-9._~+/=-]+
     - "(?i)-----BEGIN (?:(?:ENCRYPTED|RSA|EC|OPENSSH|DSA) PRIVATE KEY|PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----"
@@ -206,7 +211,7 @@ difficulty:
     - "architect"
     - "debug"
     - "refactor"
-    - "prove"
+    - "\\bprov(?:e|es|ed|ing)\\b"
     - "derive"
     - "optimi[sz]"
     - "trade[- ]?off"
