@@ -8,7 +8,7 @@ Every Hermes session has a default model. This plugin adds a deterministic, loca
 
 ### Three Signals
 
-1. **Sensitivity** — secrets, PII, and confidentiality markers require an explicitly local-classified model
+1. **Sensitivity** — configured secret assignments, SSN/card-number formats, and confidentiality markers are classified as sensitive and require an explicitly local-attested model
 2. **Role** — coding, research, creative, strategy, vision, or general
 3. **Difficulty** — simple (fast tier), standard (balanced tier), hard (strong tier)
 
@@ -110,13 +110,14 @@ delegation:
 
 Leave any tier or role blank if you do not have a model for it. The router skips blank entries and chooses the nearest configured capability fallback. It never invents an unconfigured model. Normal models omitted from `model_egress` still route but are reported as `unknown`. A sensitive model must have an exact `local` entry or the decision fails closed.
 
-Bundled secret and PII patterns are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline.
+Bundled secret assignments, SSN/card-number formats, and confidentiality markers are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline. This heuristic list is not a complete PII or DLP detector.
 
 ### Step 3: Verify
 
 ```bash
 hermes route                         # show configuration
 hermes route test                    # pass the 9 classification cases
+hermes route classify test           # classify the reserved task text "test"
 hermes route "Debug this function"   # show a routing decision
 ```
 
@@ -129,6 +130,7 @@ Configuration is re-read on every tool or command invocation, so edits require n
 ```text
 /route                              — show routing config
 /route test                         — run the 9-case classifier test suite
+/route classify test                — classify the reserved task text "test"
 /route Analyze this architecture    — classify text and show a decision
 ```
 
@@ -137,8 +139,11 @@ Configuration is re-read on every tool or command invocation, so edits require n
 ```bash
 hermes route
 hermes route test
+hermes route classify status
 hermes route "Debug this function"
 ```
+
+Use the explicit `classify` form when the task text itself is exactly `status` or `test`; those bare words remain command names.
 
 ### Tools available to the LLM
 
@@ -167,7 +172,7 @@ Configured model references must use `provider/model-id`, be 512 characters or f
 
 The classifier code runs locally after input reaches Hermes and does not call an LLM. For sensitive text, the router returns only `sensitivity.local_only_model` when the exact ref is explicitly classified `local` in `model_egress`. A blank model, absent or mismatched metadata, or an explicit `external` class produces no candidate and no fallback. A missing or empty `sensitivity.patterns` list is rejected so a partial override cannot silently disable detection.
 
-`local` is operator-attested metadata, not network attestation. The plugin does not infer trust from a provider prefix and cannot verify every provider's effective `base_url`, proxy, tunnel, DNS resolution, or transport. Verify the real destination before declaring a ref local and re-check it whenever provider configuration changes. See [Egress Trust Model](docs/EGRESS-TRUST-MODEL.md).
+`local` is operator-attested metadata, not network attestation. The plugin does not infer trust from a provider prefix and cannot verify every provider's effective `base_url`, proxy, tunnel, DNS resolution, or transport. Verify the real destination before declaring a ref local and re-check it whenever provider configuration changes. See [Egress Trust Model](https://github.com/smfworks/hermes-plugin-hybrid-routing/blob/main/docs/EGRESS-TRUST-MODEL.md).
 
 This plugin is **not a data-loss-prevention boundary**. A messaging gateway such as Telegram, Discord, or Slack transports the text before Hermes can classify it. A cloud-hosted primary model may likewise receive session text before it calls `route_classify`. For strict confidentiality, classify through the local CLI or another trusted transport before submitting the task to an LLM, or start with a trusted local primary model.
 

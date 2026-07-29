@@ -197,13 +197,21 @@ def handle_route_command(args: str, **kwargs) -> str:
     Usage:
       /route                  — show routing config
       /route test             — run test suite
+      /route classify <text>  — classify reserved or arbitrary text
       /route <text>           — classify the text
     """
     del kwargs
     arg = (args or "").strip()
+    explicit_classify_text = None
+    if arg == "classify":
+        return "Usage: `/route classify <text>`"
+    if arg.startswith("classify "):
+        explicit_classify_text = arg.removeprefix("classify ").strip()
+        if not explicit_classify_text:
+            return "Usage: `/route classify <text>`"
     try:
         router = _get_router()
-        if not arg or arg == "status":
+        if not arg or (arg == "status" and explicit_classify_text is None):
             status = router.get_status()
             lines = ["**Hybrid Contextual Routing — Configuration**", ""]
             lines.append("**Tiers:**")
@@ -233,7 +241,10 @@ def handle_route_command(args: str, **kwargs) -> str:
                 readiness = (
                     "ready" if sensitivity.get("local_route_ready") else "blocked"
                 )
-                local_suffix = f" ({_markdown_code(local_egress)}, {readiness})"
+                local_suffix = (
+                    f" ({_markdown_code(local_egress)}, operator-declared; "
+                    f"transport not verified; {readiness})"
+                )
             else:
                 local_suffix = ""
             lines.append(
@@ -270,7 +281,7 @@ def handle_route_command(args: str, **kwargs) -> str:
                 f"**Config:** {_markdown_code(status.get('config_path', '—'))}"
             )
             return "\n".join(lines)
-        elif arg == "test":
+        elif arg == "test" and explicit_classify_text is None:
             results = router.run_tests()
             passed = results["passed"]
             total = results["total"]
@@ -287,7 +298,7 @@ def handle_route_command(args: str, **kwargs) -> str:
                 lines.append(f"   → {_markdown_code(r['actual']['model'] or '—')}")
             return "\n".join(lines)
         else:
-            decision = router.classify(arg)
+            decision = router.classify(explicit_classify_text or arg)
             execution = {
                 "separate": "**RECOMMENDED**",
                 "inline": "not required",
@@ -329,10 +340,18 @@ def handle_route_command(args: str, **kwargs) -> str:
 
 def handle_cli_route(args) -> int:
     """Handle `hermes route` CLI subcommand."""
-    arg = " ".join(args) if args else ""
+    raw_args = list(args or [])
+    explicit_classify = bool(raw_args and raw_args[0] == "classify")
+    if explicit_classify:
+        arg = " ".join(raw_args[1:]).strip()
+        if not arg:
+            print("Usage: hermes route classify <text>")
+            return 1
+    else:
+        arg = " ".join(raw_args)
     try:
         router = _get_router()
-        if not arg or arg == "status":
+        if not arg or (arg == "status" and not explicit_classify):
             status = router.get_status()
             print("=" * 60)
             print("  HYBRID CONTEXTUAL ROUTING — Configuration")
@@ -372,11 +391,14 @@ def handle_cli_route(args) -> int:
             local_egress = sens.get("local_only_egress") or ""
             if local_egress:
                 readiness = "ready" if sens.get("local_route_ready") else "blocked"
-                local_suffix = f" [{_safe_output_text(local_egress)}, {readiness}]"
+                local_suffix = (
+                    f" [{_safe_output_text(local_egress)}, operator-declared; "
+                    f"transport not verified; {readiness}]"
+                )
             else:
                 local_suffix = ""
             print(
-                f"  local_only  → {_safe_output_text(local_only_model)}{local_suffix}"
+                f"  model       → {_safe_output_text(local_only_model)}{local_suffix}"
             )
             print(f"  patterns    → {sens.get('pattern_count', 0)} regex rules")
             print()
@@ -424,7 +446,7 @@ def handle_cli_route(args) -> int:
             print()
             print(f"CONFIG: {_safe_output_text(status.get('config_path', '—'))}")
             print("=" * 60)
-        elif arg == "test":
+        elif arg == "test" and not explicit_classify:
             results = router.run_tests()
             passed = results["passed"]
             total = results["total"]
@@ -538,8 +560,8 @@ def register(ctx):
     ctx.register_command(
         name="route",
         handler=handle_route_command,
-        description="Model routing: /route [status|test|<text to classify>]",
-        args_hint="[status|test|text]",
+        description="Model routing: /route [status|test|classify <text>|<text>]",
+        args_hint="[status|test|classify <text>|text]",
     )
 
     # ── CLI subcommand ─────────────────────────────────────────────
@@ -547,7 +569,7 @@ def register(ctx):
         name="route",
         help="Hybrid contextual model routing — classify tasks, show config, run tests",
         setup_fn=lambda subparser: subparser.add_argument(
-            "args", nargs="*", help="status | test | <text to classify>"
+            "args", nargs="*", help="status | test | classify <text> | <text>"
         ),
         handler_fn=lambda args: handle_cli_route(
             args.args if hasattr(args, "args") else []

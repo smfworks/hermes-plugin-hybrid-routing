@@ -123,6 +123,7 @@ def test_sensitive_content_has_no_cloud_fallbacks_and_requests_separate_executio
     assert "delegated" not in decision.reason
     assert "operator-declared local model" in decision.reason
     assert "local-only model" not in decision.reason
+    assert "physical transport not verified" in decision.reason
     assert "separate execution" in decision.reason
 
 

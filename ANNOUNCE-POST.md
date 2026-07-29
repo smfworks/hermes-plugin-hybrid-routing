@@ -36,8 +36,8 @@ The `/route` slash command works in the CLI and on every gateway platform — Te
 ctx.register_command(
     name="route",
     handler=handle_route_command,
-    description="Model routing: /route [status|test|<text>]",
-    args_hint="[status|test|text]",
+    description="Model routing: /route [status|test|classify <text>|<text>]",
+    args_hint="[status|test|classify <text>|text]",
 )
 ```
 
@@ -45,6 +45,7 @@ Usage:
 ```
 /route                              — show routing config
 /route test                         — run classifier smoke suite
+/route classify test                — classify the reserved task text "test"
 /route Analyze this architecture    — classify text
 ```
 
@@ -55,6 +56,7 @@ Terminal users get `hermes route`:
 ```bash
 hermes route                         — show config
 hermes route test                    — run tests
+hermes route classify status         — classify the reserved task text "status"
 hermes route "Debug this function"   — classify text
 ```
 

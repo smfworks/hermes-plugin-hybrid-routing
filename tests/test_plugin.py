@@ -109,9 +109,39 @@ def test_cli_status_renders_blank_models_with_em_dash(monkeypatch, capsys):
     assert exit_code == 0
     assert "fast         → —" in output
     assert "coding       → —" in output
-    assert "local_only  → —" in output
+    assert "model       → —" in output
     assert "primary model    → —" in output
     assert "→ None" not in output
+
+
+@pytest.mark.parametrize(("text", "role"), [("test", "coding"), ("status", "general")])
+def test_reserved_task_text_has_explicit_classify_form_across_public_surfaces(
+    monkeypatch, capsys, text, role
+):
+    router = plugin.HybridRouter()
+    seen = []
+    classify = router.classify
+
+    def record_classify(value):
+        seen.append(value)
+        return classify(value)
+
+    monkeypatch.setattr(router, "classify", record_classify)
+    monkeypatch.setattr(plugin, "_get_router", lambda: router)
+
+    tool_result = json.loads(plugin.handle_route_classify({"text": text}))
+    slash_result = plugin.handle_route_command(f"classify {text}")
+    exit_code = plugin.handle_cli_route(["classify", text])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["role"] == role
+    assert f"• **Role:** `{role}`" in slash_result
+    assert "Classifier Smoke Suite" not in slash_result
+    assert "Routing — Configuration" not in slash_result
+    assert exit_code == 0
+    assert f"Input:      {text}" in cli_output
+    assert f"Role:       {role}" in cli_output
+    assert seen == [text, text, text]
 
 
 def test_specific_role_phrase_wins_across_tool_slash_and_cli(
@@ -182,7 +212,10 @@ def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
     status_json = json.loads(plugin.handle_route_status({}))
 
     assert f"`{external_model}` (`unknown`)" in slash_status
-    assert f"`{local_model}` (`local`, ready)" in slash_status
+    assert (
+        f"`{local_model}` (`local`, operator-declared; transport not verified; ready)"
+        in slash_status
+    )
     assert "**Sensitive model:**" in slash_status
     assert "Sensitive local-only" not in slash_status
     assert "**Egress metadata:** incomplete (`1` unknown, `0` orphan)" in slash_status
@@ -196,7 +229,10 @@ def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
     assert plugin.handle_cli_route([]) == 0
     cli_status = capsys.readouterr().out
     assert f"{external_model} [unknown]" in cli_status
-    assert f"{local_model} [local, ready]" in cli_status
+    assert (
+        f"{local_model} [local, operator-declared; transport not verified; ready]"
+        in cli_status
+    )
     assert "metadata       → incomplete (1 unknown, 0 orphan)" in cli_status
     assert "schema         → 1 (supported 1)" in cli_status
     assert "migration      → not required" in cli_status
@@ -634,7 +670,7 @@ def test_register_uses_current_hermes_plugin_context_api():
         "route_test",
     ]
     assert [item["name"] for item in context.commands] == ["route"]
-    assert context.commands[0]["args_hint"] == "[status|test|text]"
+    assert context.commands[0]["args_hint"] == "[status|test|classify <text>|text]"
     assert [item["name"] for item in context.cli_commands] == ["route"]
     assert [item["name"] for item in context.skills] == ["hybrid-contextual-routing"]
     assert context.skills[0]["path"].as_posix().endswith("skill/SKILL.md")

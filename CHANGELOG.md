@@ -10,8 +10,8 @@ All notable changes to this project are documented here.
 - Correct source-template and override paths for profile-scoped `HERMES_HOME` installations.
 - Pass a `Path` to Hermes skill registration so plugin loading completes instead of failing after partial registration.
 - Replace the unsupported internal setuptools backend with `setuptools.build_meta`.
-- Fail closed for sensitive classifications when no local-only model is configured.
-- Reject missing or empty sensitivity-pattern sets so a partial override cannot silently disable secret/PII detection.
+- Fail closed for sensitive classifications when `sensitivity.local_only_model` is blank.
+- Reject missing or empty sensitivity-pattern sets so a partial override cannot silently disable bundled sensitivity detection.
 - Remove cloud models from every sensitive fallback chain.
 - Remove the hard-coded `ollama-cloud/glm-5.2` fallback; only configured models can be selected.
 - Choose tier fallbacks by capability distance instead of a fixed fast-first order.
@@ -22,7 +22,7 @@ All notable changes to this project are documented here.
 - Reject terminal-control, whitespace, overlong, and structurally incomplete model references.
 - Base inline execution on the effective selected model rather than only the requested difficulty tier.
 - Match custom sensitivity patterns case-insensitively.
-- Preserve bundled secret/PII detectors as a non-removable baseline when custom patterns are configured.
+- Preserve bundled sensitivity detectors as a non-removable baseline when custom patterns are configured.
 - Detect natural-language secret assignments such as `password is ...` and `API key is ...`, not only colon/equal-sign forms.
 - Label sensitive destinations in runtime output as operator-declared local rather than implying that physical transport locality was verified.
 - Resolve profile configuration through Hermes' authoritative active-home API.
@@ -30,12 +30,14 @@ All notable changes to this project are documented here.
 - Validate delegation model refs before status output and reject Unicode surrogate refs.
 - Report the unique active sensitivity-rule count and advertise slash-command arguments to native gateways.
 - Clarify gateway transport privacy and correct announcement verification/reference claims.
-- Validate the local-only model during every command's common configuration pass.
+- Validate the configured sensitive model during every command's common configuration pass.
 - Keep static checks portable across typed and untyped Hermes/TOML environments.
 - Validate output-exposed role/tier identifiers and descriptions before rendering.
 - Cover the root source-install wrapper in repository-wide Mypy gates.
 - Validate delegation skip tiers against the canonical tier set.
 - Code-wrap dynamic slash-command values to neutralize Markdown and mentions.
+- Add explicit slash/CLI `classify <text>` forms so reserved task text such as `test` and `status` remains classifiable.
+- Use a distribution-safe trust-model URL and scope sensitivity claims to the bundled detector classes.
 - Use variable-length CommonMark code fences for arbitrary slash-command paths and errors.
 - Escape control-bearing paths, inputs, errors, and other dynamic CLI output.
 - Bound role cues, reject empty values, and match literal cues at token boundaries with regular inflections.

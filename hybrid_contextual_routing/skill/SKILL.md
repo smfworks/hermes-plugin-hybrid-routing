@@ -115,8 +115,10 @@ The profile override is re-read on each command or tool call.
 ```text
 /route                  — show current routing config
 /route test             — run the 9-case classifier test suite
+/route classify <text>  — classify reserved task text such as `test` or `status`
 /route <text>           — classify text
 hermes route            — show config
 hermes route test       — run tests
+hermes route classify <text> — classify reserved task text
 hermes route "text"     — classify text
 ```

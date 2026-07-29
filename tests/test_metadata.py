@@ -79,3 +79,19 @@ def test_packaged_default_config_declares_egress_schema_version():
 
     assert config["egress_schema_version"] == 1
     assert config["model_egress"] == {}
+
+
+def test_readme_uses_distribution_safe_trust_link_and_scoped_sensitivity_claims():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert (
+        "https://github.com/smfworks/hermes-plugin-hybrid-routing/"
+        "blob/main/docs/EGRESS-TRUST-MODEL.md"
+    ) in readme
+    assert "](docs/EGRESS-TRUST-MODEL.md)" not in readme
+    assert "secrets, PII, and confidentiality markers" not in readme
+    assert "Bundled secret and PII patterns" not in readme
+    assert (
+        "secret assignments, SSN/card-number formats, and confidentiality markers"
+        in readme
+    )
