@@ -70,6 +70,15 @@ def test_every_package_data_pattern_matches_a_real_resource():
         )
 
 
+def test_sdist_manifest_keeps_source_plugin_and_trust_model_complete():
+    manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+
+    assert "include __init__.py" in manifest
+    assert "include plugin.yaml" in manifest
+    assert "include ANNOUNCE-POST.md CHANGELOG.md" in manifest
+    assert "recursive-include docs *.md" in manifest
+
+
 def test_packaged_default_config_declares_egress_schema_version():
     config = yaml.safe_load(
         (ROOT / "hybrid_contextual_routing" / "data" / "routing_config.yaml").read_text(
