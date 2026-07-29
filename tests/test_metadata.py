@@ -129,3 +129,9 @@ def test_trust_model_uses_runtime_operator_attestation_wording():
 
     assert "local, operator-declared; transport not verified; ready" in trust_model
     assert "shows `local, ready`" not in trust_model
+
+
+def test_readme_scopes_role_cue_inflections_to_reviewed_words():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Only shipped and reviewed cue words receive regular inflections" in readme

@@ -180,7 +180,19 @@ sensitivity:
       \s+(?:is|equals?)\s+
       (?!(?:(?:currently|definitely|generally|normally|really|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|unset|missing|absent))(?=\s|$|[.,;!?]))
       \S+
-    - "(?i)(?:\\bauthorization\\s*:\\s*)?\\bbearer\\s+(?:token\\s+)?(?!(?:tokens?|authentication|authorization|credentials?|policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation|is|are|was|were|should|must|can|means|represents|uses?)\\b)[a-z0-9._~+/=-]+"
+    - >-
+      (?ix)
+      (?:\bauthorization\s*:\s*)?\bbearer\s+
+      (?!
+        (?:
+          (?:tokens?|authentication|authorization|credentials?|policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation)
+          \s+(?:is|are|was|were|should|must|can|means|represents|uses?|has|have)
+          |
+          token\s+(?:policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation)
+          \s+(?:is|are|was|were|should|must|can|means|represents|uses?|has|have)
+        )\b
+      )
+      (?:token\s+)?[a-z0-9._~+/=-]+
     - "(?i)-----BEGIN (?:(?:ENCRYPTED|RSA|EC|OPENSSH|DSA) PRIVATE KEY|PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----"
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
     - "\\b(?:\\d[ -]?){13,16}\\b"
