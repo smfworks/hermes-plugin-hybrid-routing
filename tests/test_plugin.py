@@ -104,11 +104,18 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
     "text",
     [
         "the API   key is SYNTHETIC_VALUE",
+        "API_KEY_STAGING=SYNTHETIC_QUALIFIED_MARKER",
+        "PASSWORD_PROD=SYNTHETIC_QUALIFIED_MARKER",
+        "API key for staging is SYNTHETIC_NATURAL_MARKER",
+        "password's value is SYNTHETIC_POSSESSIVE_MARKER",
         "my password definitely really is SYNTHETIC_VALUE",
         "Bearer token SYNTHETIC_BEARER_MARKER",
         "Authorization: Bearer SYNTHETIC_BEARER_MARKER",
         "AWS_SECRET_ACCESS_KEY=SYNTHETIC_AWS_MARKER",
         "-----BEGIN PRIVATE KEY-----\nSYNTHETIC_PRIVATE_KEY_MARKER",
+        "MIP: material",
+        "MIP:",
+        "MIP:material",
     ],
 )
 def test_high_value_credential_forms_block_across_public_boundaries(

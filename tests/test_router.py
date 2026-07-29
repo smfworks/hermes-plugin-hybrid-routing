@@ -56,11 +56,18 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
         "clientSecret=synthetic-value",
         "access_token: synthetic-value",
         "the API   key is SYNTHETIC_VALUE",
+        "API_KEY_STAGING=SYNTHETIC_QUALIFIED_MARKER",
+        "PASSWORD_PROD=SYNTHETIC_QUALIFIED_MARKER",
+        "API key for staging is SYNTHETIC_NATURAL_MARKER",
+        "password's value is SYNTHETIC_POSSESSIVE_MARKER",
         "my password definitely really is SYNTHETIC_VALUE",
         "Bearer token SYNTHETIC_BEARER_MARKER",
         "Authorization: Bearer SYNTHETIC_BEARER_MARKER",
         "AWS_SECRET_ACCESS_KEY=SYNTHETIC_AWS_MARKER",
         "-----BEGIN PRIVATE KEY-----\nSYNTHETIC_PRIVATE_KEY_MARKER",
+        "MIP: material",
+        "MIP:",
+        "MIP:material",
     ],
 )
 def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
@@ -78,7 +85,14 @@ def test_natural_language_secret_assignments_fail_closed(tmp_path, text):
 
 @pytest.mark.parametrize(
     "text",
-    ["API key rotation is scheduled", "token budget is 1000"],
+    [
+        "API key rotation is scheduled",
+        "token budget is 1000",
+        "passwordless authentication is enabled",
+        "my password policy is strict",
+        "the token policy is documented",
+        "PASSWORD_FILE=/run/secrets/service-password",
+    ],
 )
 def test_benign_security_and_token_budget_prose_stays_normal(tmp_path, text):
     def configure(config):

@@ -24,7 +24,7 @@ All notable changes to this project are documented here.
 - Match custom sensitivity patterns case-insensitively.
 - Preserve bundled sensitivity detectors as a non-removable baseline when custom patterns are configured.
 - Detect natural-language secret assignments such as `password is ...` and `API key is ...`, not only colon/equal-sign forms.
-- Detect multi-space/adverbial assignments, bearer credentials, AWS secret-access assignments, and private-key headers while keeping rotation/token-budget prose normal.
+- Detect qualified credential variables, bounded scoped/possessive/adverbial assignments, bearer credentials, AWS secret-access assignments, private-key headers, and normal `MIP:` markers while keeping policy, token-budget, passwordless, and file/path-pointer prose normal.
 - Inflect the first semantic token of multiword role cues, including `writing a blog`, `drafting an article`, and `searching for sources`.
 - Label sensitive destinations in runtime output as operator-declared local rather than implying that physical transport locality was verified.
 - Resolve profile configuration through Hermes' authoritative active-home API.

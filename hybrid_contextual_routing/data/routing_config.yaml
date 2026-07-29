@@ -152,15 +152,15 @@ sensitivity:
   # private-key headers, SSN/card-number formats, and confidentiality markers.
   # They are not a complete secret-scanning, PII, or DLP boundary.
   patterns:
-    - "(?i)(?:\\b|_)(?:api[_-]?key|secret[_-]?(?:access[_-]?)?key|password|(?:access[_-]?)?token|dbpassword|clientsecret|secret)\\b\\s*(?::|=)\\s*\\S+"
-    - "(?i)\\bapi\\s+key(?:\\s+(?:value|\\w+ly)){0,3}\\s+is\\s+\\S+"
-    - "(?i)\\b(?:password|token|secret(?:\\s+key)?)(?:\\s+(?:value|\\w+ly)){0,3}\\s+is\\s+\\S+"
+    - "(?i)(?:\\b|_)(?:api[_-]?key|secret[_-]?(?:access[_-]?)?key|password|(?:access[_-]?)?token|dbpassword|clientsecret|secret)(?:[_-](?!(?:file|path)(?:[_-]|\\b))[a-z0-9]{1,32}){0,4}\\s*(?::|=)\\s*\\S+"
+    - "(?i)\\bapi\\s+key(?:['’]s)?(?:\\s+(?:value|for\\s+[a-z0-9_.-]{1,64}|definitely|really|actually|currently|presently)){0,3}\\s+is\\s+\\S+"
+    - "(?i)\\b(?:password|token|secret(?:\\s+key)?)(?:['’]s)?(?:\\s+(?:value|for\\s+[a-z0-9_.-]{1,64}|definitely|really|actually|currently|presently)){0,3}\\s+is\\s+\\S+"
     - "(?i)\\bauthorization\\s*:\\s*bearer\\s+\\S+"
     - "(?i)\\bbearer\\s+token\\s+\\S+"
     - "(?i)-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
     - "\\b(?:\\d[ -]?){13,16}\\b"
-    - "(?i)\\b(highly\\s+confidential|confidential|restricted|secret|internal only|mip:)\\b"
+    - "(?i)(?:\\b(?:highly\\s+confidential|confidential|restricted|secret|internal only)\\b|\\bmip:)"
 
 # ── Difficulty Classification ──────────────────────────────────────────
 # These heuristics work out of the box — no configuration needed.
