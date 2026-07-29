@@ -29,7 +29,7 @@ All notable changes to this project are documented here.
 - Keep the project, source-directory, installed-entry-point, and module plugin descriptions identical.
 - Use the canonical absolute Clearinghouse URL for the linked routing article in the announcement.
 - Inflect only reviewed verb heads and noun plurals in role cues, including `writing a blog`, `drafting an article`, and `searching for sources`, without treating nouns such as `paper`, `content`, or `class` as arbitrary verbs; keep ambiguous cues such as `find`, `import`, and `test` literal-only.
-- Label declared sensitive destinations as operator-declared, label undeclared blocked references as not declared, and state in runtime and trust-model text that physical transport is not verified.
+- Qualify every human-facing declared-local route and status label as operator-declared with transport not verified; label undeclared blocked references as not declared.
 - Resolve profile configuration through Hermes' authoritative active-home API.
 - Remove a stale package-data declaration and provide an executable package-template copy command.
 - Validate delegation model refs before status output and reject Unicode surrogate refs.

@@ -532,6 +532,50 @@ def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
     assert f"{external_model} [unknown]" in cli_decision
 
 
+def test_local_egress_is_always_qualified_in_human_outputs(
+    tmp_path, monkeypatch, capsys
+):
+    config = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "hybrid_contextual_routing"
+            / "data"
+            / "routing_config.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    local_model = "cloud-looking/local-alias"
+    config["tiers"]["balanced"]["model"] = local_model
+    config["roles"]["creative"]["model"] = local_model
+    config["delegation"]["primary_model"] = local_model
+    config["model_egress"] = {local_model: "local"}
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(
+        plugin,
+        "_get_router",
+        lambda: plugin.HybridRouter(config_path=str(config_path)),
+    )
+
+    task = "write a blog post about routing"
+    slash_status = plugin.handle_route_command("")
+    slash_decision = plugin.handle_route_command(task)
+
+    markdown_provenance = "`local`, operator-declared; transport not verified"
+    assert slash_status.count(f"`{local_model}` ({markdown_provenance})") == 2
+    assert f"• **Egress:** {markdown_provenance}" in slash_decision
+    assert f"`{local_model}` ({markdown_provenance})" in slash_decision
+
+    assert plugin.handle_cli_route([]) == 0
+    cli_status = capsys.readouterr().out
+    plain_provenance = "local, operator-declared; transport not verified"
+    assert cli_status.count(f"{local_model} [{plain_provenance}]") == 3
+
+    assert plugin.handle_cli_route(task.split()) == 0
+    cli_decision = capsys.readouterr().out
+    assert f"Egress:    {plain_provenance}" in cli_decision
+    assert f"{local_model} [{plain_provenance}]" in cli_decision
+
+
 def test_status_surfaces_do_not_call_unknown_egress_operator_declared(
     tmp_path, monkeypatch, capsys
 ):

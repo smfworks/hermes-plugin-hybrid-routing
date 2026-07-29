@@ -59,6 +59,25 @@ def _markdown_code(value: object) -> str:
     return f"{fence}{padding}{text}{padding}{fence}"
 
 
+def _egress_provenance_label(
+    egress: object,
+    declaration: object,
+    render,
+    *,
+    force: bool = False,
+) -> str:
+    """Render egress metadata without presenting declared locality as verified."""
+    if not egress:
+        return ""
+    rendered = render(egress)
+    if egress != "local" and not force:
+        return rendered
+    declaration_label = (
+        "operator-declared" if declaration == "operator" else "not declared"
+    )
+    return f"{rendered}, {declaration_label}; transport not verified"
+
+
 # ── Router factory ─────────────────────────────────────────────────────
 # A router is cheap to construct. Creating one per command/tool call keeps
 # profile resolution thread-safe and makes config edits visible immediately.
@@ -215,7 +234,12 @@ def handle_route_command(args: str, **kwargs) -> str:
             for tier_name, tier_cfg in status.get("tiers", {}).items():
                 model = tier_cfg.get("model") or "—"
                 egress = tier_cfg.get("egress") or ""
-                egress_suffix = f" ({_markdown_code(egress)})" if egress else ""
+                egress_label = _egress_provenance_label(
+                    egress,
+                    tier_cfg.get("egress_declaration"),
+                    _markdown_code,
+                )
+                egress_suffix = f" ({egress_label})" if egress_label else ""
                 lines.append(
                     f"  • {_markdown_code(tier_name)} → "
                     f"{_markdown_code(model)}{egress_suffix}"
@@ -225,7 +249,12 @@ def handle_route_command(args: str, **kwargs) -> str:
             for role_name, role_cfg in status.get("roles", {}).items():
                 model = role_cfg.get("model") or "—"
                 egress = role_cfg.get("egress") or ""
-                egress_suffix = f" ({_markdown_code(egress)})" if egress else ""
+                egress_label = _egress_provenance_label(
+                    egress,
+                    role_cfg.get("egress_declaration"),
+                    _markdown_code,
+                )
+                egress_suffix = f" ({egress_label})" if egress_label else ""
                 lines.append(
                     f"  • {_markdown_code(role_name)} → "
                     f"{_markdown_code(model)}{egress_suffix}"
@@ -235,19 +264,16 @@ def handle_route_command(args: str, **kwargs) -> str:
             local_only = sensitivity.get("local_only_model") or "—"
             local_egress = sensitivity.get("local_only_egress") or ""
             if local_egress:
-                local_declaration = sensitivity.get("local_only_egress_declaration")
-                declaration_label = (
-                    "operator-declared"
-                    if local_declaration == "operator"
-                    else "not declared"
+                local_label = _egress_provenance_label(
+                    local_egress,
+                    sensitivity.get("local_only_egress_declaration"),
+                    _markdown_code,
+                    force=True,
                 )
                 readiness = (
                     "ready" if sensitivity.get("local_route_ready") else "blocked"
                 )
-                local_suffix = (
-                    f" ({_markdown_code(local_egress)}, {declaration_label}; "
-                    f"transport not verified; {readiness})"
-                )
+                local_suffix = f" ({local_label}; {readiness})"
             else:
                 local_suffix = ""
             lines.append(
@@ -302,6 +328,11 @@ def handle_route_command(args: str, **kwargs) -> str:
             return "\n".join(lines)
         else:
             decision = router.classify(explicit_classify_text or arg)
+            decision_egress = _egress_provenance_label(
+                decision.egress,
+                decision.egress_declaration,
+                _markdown_code,
+            )
             execution = {
                 "separate": "**RECOMMENDED**",
                 "inline": "not required",
@@ -316,7 +347,7 @@ def handle_route_command(args: str, **kwargs) -> str:
                 f"• **Role:** {_markdown_code(decision.role)}",
                 f"• **Difficulty:** {_markdown_code(decision.difficulty)}",
                 f"• **Sensitivity:** {_markdown_code(decision.sensitivity)}",
-                f"• **Egress:** {_markdown_code(decision.egress or '—')}",
+                f"• **Egress:** {decision_egress or _markdown_code('—')}",
                 f"• **Egress declaration:** "
                 f"{_markdown_code(decision.egress_declaration or 'none')}",
                 f"• **Disposition:** {_markdown_code(decision.disposition)}",
@@ -328,9 +359,14 @@ def handle_route_command(args: str, **kwargs) -> str:
             ]
             for i, route in enumerate(decision.candidate_routes):
                 label = "primary" if i == 0 else f"fallback {i}"
+                route_egress = _egress_provenance_label(
+                    route["egress"],
+                    route.get("egress_declaration"),
+                    _markdown_code,
+                )
                 lines.append(
                     f"  {_markdown_code(label)} → {_markdown_code(route['model'])} "
-                    f"({_markdown_code(route['egress'])})"
+                    f"({route_egress})"
                 )
             return "\n".join(lines)
     except Exception as e:
@@ -364,7 +400,12 @@ def handle_cli_route(args) -> int:
             for tier_name, tier_cfg in status.get("tiers", {}).items():
                 model = tier_cfg.get("model") or "—"
                 egress = tier_cfg.get("egress") or ""
-                egress_suffix = f" [{_safe_output_text(egress)}]" if egress else ""
+                egress_label = _egress_provenance_label(
+                    egress,
+                    tier_cfg.get("egress_declaration"),
+                    _safe_output_text,
+                )
+                egress_suffix = f" [{egress_label}]" if egress_label else ""
                 desc = tier_cfg.get("description", "")
                 print(
                     f"  {_safe_output_text(tier_name):12s} → "
@@ -379,7 +420,12 @@ def handle_cli_route(args) -> int:
                 egress = role_cfg.get("egress") or ""
                 desc = role_cfg.get("description", "")
                 auxiliary = role_cfg.get("auxiliary", False)
-                marker = f" [{_safe_output_text(egress)}]" if egress else ""
+                egress_label = _egress_provenance_label(
+                    egress,
+                    role_cfg.get("egress_declaration"),
+                    _safe_output_text,
+                )
+                marker = f" [{egress_label}]" if egress_label else ""
                 marker += " (auxiliary)" if auxiliary else ""
                 print(
                     f"  {_safe_output_text(role_name):12s} → "
@@ -393,17 +439,14 @@ def handle_cli_route(args) -> int:
             local_only_model = sens.get("local_only_model") or "—"
             local_egress = sens.get("local_only_egress") or ""
             if local_egress:
-                local_declaration = sens.get("local_only_egress_declaration")
-                declaration_label = (
-                    "operator-declared"
-                    if local_declaration == "operator"
-                    else "not declared"
+                local_label = _egress_provenance_label(
+                    local_egress,
+                    sens.get("local_only_egress_declaration"),
+                    _safe_output_text,
+                    force=True,
                 )
                 readiness = "ready" if sens.get("local_route_ready") else "blocked"
-                local_suffix = (
-                    f" [{_safe_output_text(local_egress)}, {declaration_label}; "
-                    f"transport not verified; {readiness}]"
-                )
+                local_suffix = f" [{local_label}; {readiness}]"
             else:
                 local_suffix = ""
             print(
@@ -443,9 +486,12 @@ def handle_cli_route(args) -> int:
             print("DELEGATION:")
             primary_model = deleg.get("primary_model") or "—"
             primary_egress = deleg.get("primary_egress") or ""
-            primary_suffix = (
-                f" [{_safe_output_text(primary_egress)}]" if primary_egress else ""
+            primary_label = _egress_provenance_label(
+                primary_egress,
+                deleg.get("primary_egress_declaration"),
+                _safe_output_text,
             )
+            primary_suffix = f" [{primary_label}]" if primary_label else ""
             print(
                 f"  primary model    → {_safe_output_text(primary_model)}"
                 f"{primary_suffix}"
@@ -481,6 +527,11 @@ def handle_cli_route(args) -> int:
             print("=" * 60)
         else:
             decision = router.classify(arg)
+            decision_egress = _egress_provenance_label(
+                decision.egress,
+                decision.egress_declaration,
+                _safe_output_text,
+            )
             print()
             print("┌─────────────────────────────────────────────────┐")
             print("│  ROUTING DECISION                               │")
@@ -497,7 +548,7 @@ def handle_cli_route(args) -> int:
             print(f"  Role:       {decision.role}")
             print(f"  Difficulty: {decision.difficulty}")
             print(f"  Sensitivity: {decision.sensitivity}")
-            print(f"  Egress:    {decision.egress or '—'}")
+            print(f"  Egress:    {decision_egress or '—'}")
             print(f"  Egress declaration: {decision.egress_declaration or 'none'}")
             print(f"  Disposition: {decision.disposition}")
             print()
@@ -514,7 +565,12 @@ def handle_cli_route(args) -> int:
             print("  Fallback chain:")
             for i, route in enumerate(decision.candidate_routes):
                 marker = "primary" if i == 0 else f"fallback {i}"
-                print(f"    {marker:12s} → {route['model']} [{route['egress']}]")
+                route_egress = _egress_provenance_label(
+                    route["egress"],
+                    route.get("egress_declaration"),
+                    _safe_output_text,
+                )
+                print(f"    {marker:12s} → {route['model']} [{route_egress}]")
             print()
         return 0
     except Exception as e:
