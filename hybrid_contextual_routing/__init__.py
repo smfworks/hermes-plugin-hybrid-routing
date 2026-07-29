@@ -237,7 +237,7 @@ def handle_route_command(args: str, **kwargs) -> str:
             else:
                 local_suffix = ""
             lines.append(
-                f"**Sensitive local-only:** {_markdown_code(local_only)}{local_suffix}"
+                f"**Sensitive model:** {_markdown_code(local_only)}{local_suffix}"
             )
             egress_metadata = status.get("egress_metadata", {})
             completeness = (

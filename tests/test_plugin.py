@@ -183,6 +183,8 @@ def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
 
     assert f"`{external_model}` (`unknown`)" in slash_status
     assert f"`{local_model}` (`local`, ready)" in slash_status
+    assert "**Sensitive model:**" in slash_status
+    assert "Sensitive local-only" not in slash_status
     assert "**Egress metadata:** incomplete (`1` unknown, `0` orphan)" in slash_status
     assert "**Egress schema:** `1` (supported `1`)" in slash_status
     assert "**Sensitive migration required:** no" in slash_status

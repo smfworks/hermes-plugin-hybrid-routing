@@ -1,7 +1,7 @@
 """Hybrid Contextual Model Router — classification engine.
 
 Classifies incoming tasks by three signals:
-  1. Data sensitivity (secrets/PII → local-only models)
+  1. Data sensitivity (secrets/PII → operator-declared local models)
   2. Role (coding, research, creative, strategy, vision, general)
   3. Difficulty (simple, standard, hard)
 
@@ -706,7 +706,8 @@ class HybridRouter:
                     sensitivity=sensitivity,
                     should_delegate=False,
                     reason=(
-                        "Sensitive content detected, but a local-only model is "
+                        "Sensitive content detected, but an operator-declared "
+                        "local model is "
                         "not configured. No route was selected to prevent a "
                         "cloud fallback recommendation."
                     ),
@@ -733,7 +734,7 @@ class HybridRouter:
                 )
             candidates.append(local_model)
             reason = (
-                "Sensitive content detected → routing to local-only model "
+                "Sensitive content detected → routing to operator-declared local model "
                 f"'{local_model}'"
             )
         else:
@@ -806,7 +807,9 @@ class HybridRouter:
         )
         disposition = "separate"
         if sensitivity == SENSITIVE:
-            reason += " (separate execution on the local-only model recommended)"
+            reason += (
+                " (separate execution on the operator-declared local model recommended)"
+            )
         elif skip_if_same and selected_is_primary:
             disposition = "inline"
             reason += " (handled inline — same as primary model)"

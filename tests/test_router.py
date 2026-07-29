@@ -40,7 +40,7 @@ def test_sensitive_content_without_local_model_fails_closed(tmp_path):
     assert decision.should_delegate is False
     assert decision.disposition == "block"
     assert decision.to_dict()["disposition"] == "block"
-    assert "local-only model is not configured" in decision.reason
+    assert "operator-declared local model is not configured" in decision.reason
 
 
 @pytest.mark.parametrize(
@@ -121,6 +121,8 @@ def test_sensitive_content_has_no_cloud_fallbacks_and_requests_separate_executio
     assert decision.should_delegate is True
     assert decision.disposition == "separate"
     assert "delegated" not in decision.reason
+    assert "operator-declared local model" in decision.reason
+    assert "local-only model" not in decision.reason
     assert "separate execution" in decision.reason
 
 
