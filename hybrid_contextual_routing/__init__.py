@@ -18,11 +18,8 @@ logger = logging.getLogger(__name__)
 
 __version__ = "1.1.0"
 __description__ = (
-    "Contextual model routing for Hermes agents. Classifies tasks by sensitivity, "
-    "role, and difficulty, then recommends the right model for the job. Supports "
-    "cloud/local hybrid inference stacks with per-tier, per-role, and fail-closed "
-    "sensitivity recommendations while keeping the primary session model fixed for "
-    "prompt caching."
+    "Advisory contextual model routing for Hermes agents by sensitivity, role, "
+    "and difficulty"
 )
 __author__ = "SMF Works"
 

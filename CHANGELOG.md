@@ -25,6 +25,9 @@ All notable changes to this project are documented here.
 - Preserve bundled sensitivity detectors as a non-removable baseline when custom patterns are configured.
 - Detect natural-language secret assignments such as `password is ...` and `API key is ...`, not only colon/equal-sign forms.
 - Detect qualified credential variables, bounded scoped/possessive/adverbial assignments, bearer credentials, AWS secret-access assignments, private-key headers, and normal `MIP:` markers while keeping policy, token-budget, passwordless, and file/path-pointer prose normal.
+- Give the longest matched role cue precedence over multiple shorter matches.
+- Keep the project, source-directory, installed-entry-point, and module plugin descriptions identical.
+- Use the canonical absolute Clearinghouse URL for the linked routing article in the announcement.
 - Inflect the first semantic token of multiword role cues, including `writing a blog`, `drafting an article`, and `searching for sources`.
 - Label sensitive destinations in runtime output as operator-declared local rather than implying that physical transport locality was verified.
 - Resolve profile configuration through Hermes' authoritative active-home API.

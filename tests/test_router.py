@@ -271,6 +271,18 @@ def test_multiword_role_cues_inflect_the_semantic_verb(text, role):
     assert HybridRouter().classify_role(text) == role
 
 
+def test_longest_matched_role_cue_has_precedence_over_multiple_shorter_cues(tmp_path):
+    def configure(config):
+        for role_config in config["roles"].values():
+            role_config["cues"] = []
+        config["roles"]["research"]["cues"] = ["very competitive", "analysis"]
+        config["roles"]["strategy"]["cues"] = ["competitive analysis"]
+
+    router = configured_router(tmp_path, configure)
+
+    assert router.classify_role("very competitive analysis") == "strategy"
+
+
 def test_every_shipped_exact_role_cue_routes_to_its_owning_role():
     router = HybridRouter()
 

@@ -6,7 +6,7 @@
 
 ## The Journey
 
-Last week we published [Building a Hybrid Contextual Model Routing Stack for Hermes Agent](/blog/2026-07-28-hybrid-contextual-model-routing-hermes) — the story of building a three-signal classification engine that recommends the right model without changing the primary session.
+Last week we published [Building a Hybrid Contextual Model Routing Stack for Hermes Agent](https://www.smfclearinghouse.com/blog/2026-07-28-hybrid-contextual-model-routing-hermes) — the story of building a three-signal classification engine that recommends the right model without changing the primary session.
 
 The plugin is now available for beta testing from its repository.
 

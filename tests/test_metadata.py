@@ -18,6 +18,8 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_release_versions_and_source_install_manifest_stay_in_sync():
+    import hybrid_contextual_routing as plugin
+
     project_data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project_version = project_data["project"]["version"]
     root_manifest = yaml.safe_load((ROOT / "plugin.yaml").read_text(encoding="utf-8"))
@@ -44,6 +46,12 @@ def test_release_versions_and_source_install_manifest_stay_in_sync():
         skill_version.group(1),
     } == {project_version}
     assert (ROOT / "__init__.py").exists()
+    assert {
+        project_data["project"]["description"],
+        root_manifest["description"].strip(),
+        package_manifest["description"].strip(),
+        plugin.__description__,
+    } == {project_data["project"]["description"]}
 
 
 def test_entrypoint_metadata_constants_match_source_manifest():
@@ -104,3 +112,13 @@ def test_readme_uses_distribution_safe_trust_link_and_scoped_sensitivity_claims(
         "secret assignments, bearer credentials, private-key headers, "
         "SSN/card-number formats, and confidentiality markers" in readme
     )
+
+
+def test_announcement_uses_canonical_absolute_article_url():
+    announcement = (ROOT / "ANNOUNCE-POST.md").read_text(encoding="utf-8")
+
+    assert (
+        "https://www.smfclearinghouse.com/blog/"
+        "2026-07-28-hybrid-contextual-model-routing-hermes"
+    ) in announcement
+    assert "](/blog/" not in announcement

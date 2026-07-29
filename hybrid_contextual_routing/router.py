@@ -469,13 +469,13 @@ class HybridRouter:
         self._ensure_compiled()
         t = text.strip().lower()
         best_role = "general"
-        best_score = (0, 0)
+        best_score = (0, 0, 0)
         for role_name, patterns in self._compiled_role_cues.items():
             matches = [match for pattern in patterns if (match := pattern.search(t))]
-            # Weight literal specificity before match count so an exact phrase
-            # such as "competitive analysis" beats its generic "analysis"
-            # sub-cue. Stable role order remains the final tie-breaker.
-            score = (sum(len(match.group(0)) for match in matches), len(matches))
+            lengths = [len(match.group(0)) for match in matches]
+            # The longest literal match owns specificity. Aggregate match length
+            # and count only break ties; stable role order is the final tie-breaker.
+            score = (max(lengths, default=0), sum(lengths), len(lengths))
             if score > best_score:
                 best_score = score
                 best_role = role_name

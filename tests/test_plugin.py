@@ -780,5 +780,5 @@ def test_entrypoint_registration_backfills_manifest_metadata():
     plugin.register(context)
 
     assert context.manifest.version == plugin.__version__
-    assert context.manifest.description.startswith("Contextual model routing")
-    assert context.manifest.author == "SMF Works"
+    assert context.manifest.description == plugin.__description__
+    assert context.manifest.author == plugin.__author__
