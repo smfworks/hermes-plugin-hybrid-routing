@@ -102,6 +102,7 @@ _DOUBLED_FINAL_CONSONANT_WORDS = frozenset(
         "drop",
         "fit",
         "plan",
+        "roadmap",
         "stop",
         "submit",
     }
@@ -459,9 +460,13 @@ class HybridRouter:
         self._ensure_compiled()
         t = text.strip().lower()
         best_role = "general"
-        best_score = 0
+        best_score = (0, 0)
         for role_name, patterns in self._compiled_role_cues.items():
-            score = sum(1 for p in patterns if p.search(t))
+            matches = [match for pattern in patterns if (match := pattern.search(t))]
+            # Weight literal specificity before match count so an exact phrase
+            # such as "competitive analysis" beats its generic "analysis"
+            # sub-cue. Stable role order remains the final tie-breaker.
+            score = (sum(len(match.group(0)) for match in matches), len(matches))
             if score > best_score:
                 best_score = score
                 best_role = role_name

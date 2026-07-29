@@ -193,6 +193,19 @@ def test_shipped_refactor_cue_matches_regular_inflections(text):
     assert HybridRouter().classify_role(text) == "coding"
 
 
+def test_every_shipped_exact_role_cue_routes_to_its_owning_role():
+    router = HybridRouter()
+
+    for role, role_config in router.config["roles"].items():
+        for cue in role_config.get("cues", []):
+            assert router.classify_role(cue) == role, (role, cue)
+
+
+@pytest.mark.parametrize("text", ["roadmapped", "roadmapping"])
+def test_shipped_roadmap_cue_matches_doubled_consonant_inflections(text):
+    assert HybridRouter().classify_role(text) == "strategy"
+
+
 @pytest.mark.parametrize("cue", ["", "   "])
 def test_role_cues_reject_empty_or_whitespace_values(tmp_path, cue):
     def configure(config):

@@ -101,6 +101,45 @@ def test_cli_status_renders_blank_models_with_em_dash(monkeypatch, capsys):
     assert "→ None" not in output
 
 
+def test_specific_role_phrase_wins_across_tool_slash_and_cli(
+    tmp_path, monkeypatch, capsys
+):
+    config = yaml.safe_load(
+        (
+            Path(__file__).parents[1]
+            / "hybrid_contextual_routing"
+            / "data"
+            / "routing_config.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    config["roles"]["research"]["model"] = "provider/research"
+    config["roles"]["strategy"]["model"] = "provider/strategy"
+    config["delegation"]["primary_model"] = "provider/research"
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(
+        plugin,
+        "_get_router",
+        lambda: plugin.HybridRouter(config_path=str(config_path)),
+    )
+
+    tool_result = json.loads(
+        plugin.handle_route_classify({"text": "competitive analysis"})
+    )
+    slash_result = plugin.handle_route_command("competitive analysis")
+    exit_code = plugin.handle_cli_route(["competitive analysis"])
+    cli_output = capsys.readouterr().out
+
+    assert tool_result["role"] == "strategy"
+    assert tool_result["model"] == "provider/strategy"
+    assert tool_result["disposition"] == "separate"
+    assert "• **Role:** `strategy`" in slash_result
+    assert "• **Model:** `provider/strategy`" in slash_result
+    assert exit_code == 0
+    assert "Role:       strategy" in cli_output
+    assert "Model:      provider/strategy" in cli_output
+
+
 def test_slash_and_cli_surface_effective_egress(tmp_path, monkeypatch, capsys):
     config = yaml.safe_load(
         (

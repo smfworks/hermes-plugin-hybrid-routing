@@ -38,6 +38,7 @@ All notable changes to this project are documented here.
 - Escape control-bearing paths, inputs, errors, and other dynamic CLI output.
 - Bound role cues, reject empty values, and match literal cues at token boundaries with regular inflections.
 - Correct regular inflections such as `refactored` and `refactoring` without generating doubled consonants.
+- Prefer the most specific matching role cue so exact phrases do not lose to generic sub-cues, and recognize `roadmapped`/`roadmapping` for the shipped `roadmap` cue.
 - Require exactly the canonical fast, balanced, and strong tier mappings.
 - Validate tier input-token limits and return only validated, JSON-safe fields from status.
 - Render blank models consistently as an em dash in human-facing slash and CLI output.
