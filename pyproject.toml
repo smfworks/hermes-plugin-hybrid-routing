@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "hermes-plugin-hybrid-routing"
+version = "1.0.0"
+description = "Contextual model routing for Hermes agents — sensitivity, role, difficulty-based delegation routing"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "SMF Works", email = "aionaedge@agentmail.to"},
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+keywords = ["hermes", "ai-agent", "model-routing", "contextual-switching", "delegation", "cost-optimization"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/smfworks/hermes-plugin-hybrid-routing"
+Repository = "https://github.com/smfworks/hermes-plugin-hybrid-routing"
+Documentation = "https://www.smfclearinghouse.com/blog/2026-07-28-hybrid-contextual-model-routing-hermes"
+
+# pip entry point — enables `pip install hermes-plugin-hybrid-routing`
+# and Hermes discovers it via the hermes_agent.plugins entry point group
+[project.entry-points."hermes_agent.plugins"]
+hybrid-contextual-routing = "hybrid_contextual_routing"
+
+[tool.setuptools]
+packages = ["hybrid_contextual_routing"]
+
+[tool.setuptools.package-data]
+hybrid_contextual_routing = ["plugin.yaml", "data/*.yaml", "skill/*.md", "README.md"]

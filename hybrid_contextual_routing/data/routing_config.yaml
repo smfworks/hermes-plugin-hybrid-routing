@@ -1,0 +1,173 @@
+# Hybrid Contextual Model Routing — Default Configuration
+#
+# This file ships with the plugin. To configure, create a copy at:
+#   ~/.hermes/profiles/<your-profile>/hybrid_routing/routing_config.yaml
+# Then fill in YOUR model refs below.
+#
+# Models are referenced as "provider/model-id" matching Hermes provider names.
+# Run `hermes auth list` to see which providers you have configured.
+# Run `hermes model` to see your available models.
+#
+# ── Tiers ──────────────────────────────────────────────────────────────
+# Three cost/capability tiers. Fill in model refs for providers YOU have.
+# Leave blank if you don't have a model for that tier — the router will
+# skip blank tiers and fall through to the next available one.
+
+tiers:
+  fast:
+    # Example: ollama-cloud/glm-5.2, custom:local-myserver/my-model
+    model: ""
+    description: "Quick chats, formatting, simple Q&A, acknowledgments"
+    max_input_tokens: 2000
+
+  balanced:
+    # Example: openai-codex/gpt-5.6-sol, ollama-cloud/glm-5.2
+    model: ""
+    description: "Most work — code, research, analysis, content drafting"
+    max_input_tokens: 128000
+
+  strong:
+    # Example: xai-oauth/grok-4.5, anthropic/claude-opus-4-7
+    model: ""
+    description: "Deep strategy, complex multi-step reasoning, CIO-level decisions"
+    max_input_tokens: 128000
+
+# ── Roles ──────────────────────────────────────────────────────────────
+# Role-based routing overrides the tier when a task clearly matches a
+# specialized role. Leave model blank to let the tier handle it.
+
+roles:
+  coding:
+    # Example: openai-codex/gpt-5.6-sol
+    model: ""
+    description: "Code writing, debugging, refactoring, architecture"
+    cues:
+      - "code"
+      - "debug"
+      - "refactor"
+      - "function"
+      - "class"
+      - "test"
+      - "pytest"
+      - "import"
+      - "API endpoint"
+      - "bug"
+      - "stack trace"
+      - "pull request"
+      - "git commit"
+
+  research:
+    # Example: openai-codex/gpt-5.6-sol
+    model: ""
+    description: "Research, literature review, paper analysis, web investigation"
+    cues:
+      - "research"
+      - "paper"
+      - "arxiv"
+      - "literature"
+      - "study"
+      - "analysis"
+      - "benchmark"
+      - "compare"
+      - "evaluate"
+      - "survey"
+      - "find"
+      - "search for"
+
+  creative:
+    # Example: anthropic/claude-sonnet-4-6, ollama-cloud/glm-5.2
+    model: ""
+    description: "Creative writing, blog posts, social content, narratives"
+    cues:
+      - "write a blog"
+      - "blog post"
+      - "story"
+      - "narrative"
+      - "creative"
+      - "draft an article"
+      - "social media post"
+      - "tweet"
+      - "thread"
+      - "content"
+
+  strategy:
+    # Example: xai-oauth/grok-4.5, anthropic/claude-opus-4-7
+    model: ""
+    description: "Strategic planning, architecture decisions, CIO-level analysis"
+    cues:
+      - "strategy"
+      - "roadmap"
+      - "architecture decision"
+      - "business plan"
+      - "go-to-market"
+      - "competitive analysis"
+      - "SWOT"
+      - "strategic"
+      - "vision"
+      - "direction"
+      - "prioritize"
+
+  vision:
+    # Usually handled by Hermes' built-in auxiliary.vision config
+    model: ""
+    description: "Image analysis, screenshots, visual content"
+    auxiliary: true
+
+  general:
+    # Example: ollama-cloud/glm-5.2
+    model: ""
+    description: "Default — no specific role detected"
+    cues: []
+
+# ── Sensitivity ────────────────────────────────────────────────────────
+# Route sensitive content to a local or separate provider.
+# For true local-only, point this at a local inference server.
+# Leave blank to disable sensitivity-based routing.
+sensitivity:
+  local_only_model: ""
+  patterns:
+    - "(?i)(api[_\\s-]?key|password|token|secret)(?:\\s+\\w+)?\\s*[:=]\\s*\\S+"
+    - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+    - "\\b(?:\\d[ -]?){13,16}\\b"
+    - "(?i)\\b(highly\\s+confidential|confidential|restricted|secret|internal only|mip:)\\b"
+
+# ── Difficulty Classification ──────────────────────────────────────────
+# These heuristics work out of the box — no configuration needed.
+difficulty:
+  hard_cues:
+    - "analyz"
+    - "architect"
+    - "debug"
+    - "refactor"
+    - "prove"
+    - "derive"
+    - "optimi[sz]"
+    - "trade[- ]?off"
+    - "step[- ]by[- ]step"
+    - "reason through"
+    - "root cause"
+    - "algorithm"
+    - "complexity"
+    - "strateg"
+    - "implement"
+    - "compare"
+    - "evaluate"
+    - "design (a|an|the)"
+    - "explain why"
+    - "walk me through"
+    - "plan (a|an|the|out)"
+  simple_cues:
+    - "^\\s*(hi|hey|hello|yo|sup|thanks|thank you|ty|ok|okay|k|yes|yep|no|nope|got it|cool|nice|great|good morning|good night|gm|gn)\\b"
+  hard_if_code_block: true
+  hard_if_long_input: 600
+  hard_if_many_words: 80
+  hard_if_many_lines: 8
+  simple_if_short_words: 4
+
+# ── Delegation Threshold ───────────────────────────────────────────────
+# Set primary_model to match YOUR session's default model.
+# Leave blank to always delegate (not recommended).
+delegation:
+  skip_for_tier: [fast]
+  skip_if_same_as_primary: true
+  primary_model: ""

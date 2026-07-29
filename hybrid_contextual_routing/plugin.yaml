@@ -1,0 +1,20 @@
+name: hybrid-contextual-routing
+version: 1.0.0
+description: >
+  Contextual model routing for Hermes agents. Classifies tasks by
+  sensitivity, role, and difficulty, then recommends the right model
+  for the job. Supports cloud/local hybrid inference stacks with
+  per-tier, per-role, and sensitivity-based routing. Delegation-based
+  — preserves prompt caching by never swapping models mid-conversation.
+
+author: SMF Works
+provides_tools:
+  - route_classify
+  - route_status
+  - route_test
+provides_commands:
+  - route
+provides_cli_commands:
+  - route
+provides_skills:
+  - hybrid-contextual-routing
