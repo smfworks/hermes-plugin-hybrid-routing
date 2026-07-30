@@ -1,10 +1,14 @@
 # Hybrid Contextual Model Routing — Default Configuration
 #
 # This file ships with the plugin. To configure, create a copy at:
-#   ~/.hermes/profiles/<your-profile>/hybrid_routing/routing_config.yaml
+# $HERMES_HOME/hybrid_routing/routing_config.yaml
+# (`HERMES_HOME` is ~/.hermes for the default profile or
+# ~/.hermes/profiles/<name> for a named profile.)
 # Then fill in YOUR model refs below.
 #
 # Models are referenced as "provider/model-id" matching Hermes provider names.
+# Refs must be 512 characters or fewer and contain no whitespace or control
+# characters. Both provider and model-id must be non-empty.
 # Run `hermes auth list` to see which providers you have configured.
 # Run `hermes model` to see your available models.
 #
@@ -119,17 +123,85 @@ roles:
     description: "Default — no specific role detected"
     cues: []
 
+# ── Model egress metadata ──────────────────────────────────────────────
+# Exact model refs may be declared "local" or "external". Refs omitted here
+# remain "unknown". The router never infers locality
+# from a provider name or model-id. A "local" value is an operator attestation:
+# keep it aligned with the provider's real endpoint/base_url.
+#
+# Example after verifying the destination:
+# egress_schema_version: 1
+# model_egress:
+#   "custom:local-laguna/poolside/Laguna-S-2.1-NVFP4": local
+#   "ollama-cloud/glm-5.2": external
+#
+# Keep this version marker with copied 1.1+ configurations. A missing marker is
+# treated as a legacy schema and can never authorize a sensitive route.
+egress_schema_version: 1
+model_egress: {}
+
 # ── Sensitivity ────────────────────────────────────────────────────────
-# Route sensitive content to a local or separate provider.
-# For true local-only, point this at a local inference server.
-# Leave blank to disable sensitivity-based routing.
+# Bundled patterns are a non-removable safety baseline. Patterns in a copied
+# override are additive and may extend, but never replace, those detectors.
+# Sensitive content is routed only when local_only_model exactly matches a ref
+# explicitly marked "local" in model_egress. Otherwise routing fails closed.
+# The metadata is operator-declared; the plugin cannot verify physical transport.
 sensitivity:
   local_only_model: ""
+  # Baseline heuristics cover common assignments, bounded non-metadata-qualified
+  # variables, bearer credentials, private-key headers, SSN/card-number formats,
+  # and confidentiality markers. Policy/status variables and explicit negated
+  # state prose are excluded from assignment detection.
+  # They are not a complete secret-scanning, PII, or DLP boundary.
   patterns:
-    - "(?i)(api[_\\s-]?key|password|token|secret)(?:\\s+\\w+)?\\s*[:=]\\s*\\S+"
+    - >-
+      (?ix)
+      (?:\b|_)
+      (?:api[\s_-]*key|secret[\s_-]*(?:access[\s_-]*)?key|password|(?:access[\s_-]*)?token|dbpassword|clientsecret|secret)
+      (?:
+        [_-]
+        (?!(?:file|path|policy|budget|rotation|ttl|expiry|expiration|status|format|documentation|santa|days?)(?:[_-]|\b))
+        [a-z0-9]{1,32}
+      ){0,4}
+      (?:
+        ["']?\s*(?::|=)\s*
+        (?:
+          ["'](?!(?:none|null|unset|missing|absent|not[-_\s]+configured)["'](?=\s*(?:[,;}\]]|$)))\S+
+          |
+          (?!["'])(?!(?:none|null|unset|missing|absent|not[-_\s]+configured)(?=\s*(?:[,;}\]]|$)))\S+
+        )
+        |
+        \s+(?:is|equals?)\s+
+        (?!(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|null|unset|missing|absent))[.,;!?]?(?=\s|$))
+        \S+
+      )
+    - >-
+      (?ix)
+      \b(?:api[\s_-]+key|password|token|secret(?:\s+key)?)
+      (?:['’]s)?
+      (?:\s+(?:current\s+value|value|actually|currently|definitely|generally|normally|really|securely|temporarily)){0,3}
+      (?:\s+for\s+(?:the\s+)?[a-z0-9_.-]{1,64}(?:\s+(?:environment|env|account|tenant|workspace|cluster|service|application|app|database|db|region)){0,2})?
+      (?:\s+(?:current\s+value|value|actually|currently|definitely|generally|normally|really|securely|temporarily)){0,3}
+      \s+(?:is|equals?)\s+
+      (?!(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:(?:not|never)\s+(?:(?:actually|currently|definitely|generally|normally|really|securely|temporarily)\s+){0,3}(?:stored|logged|set|configured|available|present)|no\s+(?:stored\s+)?value|(?:none|null|unset|missing|absent))[.,;!?]?(?=\s|$))
+      \S+
+    - >-
+      (?ix)
+      (?:\bauthorization\s*:\s*)?\bbearer\s+
+      (?!
+        (?:
+          (?:tokens?|authentication|authorization|credentials?|policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation|supply|assembly|family)
+          \s+(?:is|are|was|were|should|must|can|means|represents|uses?|has|have)
+          |
+          token\s+(?:policy|scheme|header|budget|rotation|ttl|expiry|expiration|status|format|documentation|supply|assembly|family)
+          \s+(?:is|are|was|were|should|must|can|means|represents|uses?|has|have)
+        )\b(?=\s+[a-z])
+      )
+      (?:token\s+)?[a-z0-9._~+/=-]+
+    - "(?i)-----BEGIN (?:(?:ENCRYPTED|RSA|EC|OPENSSH|DSA) PRIVATE KEY|PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----"
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
     - "\\b(?:\\d[ -]?){13,16}\\b"
-    - "(?i)\\b(highly\\s+confidential|confidential|restricted|secret|internal only|mip:)\\b"
+    - "(?i)(?:\\b(?:highly\\s+confidential|confidential|restricted|secret|internal only)\\b|\\bmip:)"
 
 # ── Difficulty Classification ──────────────────────────────────────────
 # These heuristics work out of the box — no configuration needed.
@@ -139,7 +211,7 @@ difficulty:
     - "architect"
     - "debug"
     - "refactor"
-    - "prove"
+    - "\\bprov(?:e|es|ed|ing)\\b"
     - "derive"
     - "optimi[sz]"
     - "trade[- ]?off"
@@ -167,6 +239,8 @@ difficulty:
 # ── Delegation Threshold ───────────────────────────────────────────────
 # Set primary_model to match YOUR session's default model.
 # Leave blank to always delegate (not recommended).
+# A skipped tier stays inline only when the selected model is the primary model;
+# role overrides and fallback tiers still recommend separate execution.
 delegation:
   skip_for_tier: [fast]
   skip_if_same_as_primary: true

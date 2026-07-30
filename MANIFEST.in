@@ -1,0 +1,5 @@
+include ANNOUNCE-POST.md CHANGELOG.md README.md
+include __init__.py
+include plugin.yaml
+recursive-include docs *.md
+recursive-include hybrid_contextual_routing *.md *.yaml

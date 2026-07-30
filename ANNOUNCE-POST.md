@@ -1,14 +1,14 @@
 # Hybrid Contextual Model Routing: From Skill to Hermes Plugin
 
-*The routing stack we built last week is now a published Hermes plugin. Here's what changed, how to install it, and why we're shipping blank configs instead of defaults.*
+*The routing stack we built last week is now available as an open-source Hermes plugin on GitHub. Here's what changed, how to install it, and why it ships with blank model fields.*
 
 ---
 
 ## The Journey
 
-Last week we published [Building a Hybrid Contextual Model Routing Stack for Hermes Agent](/blog/2026-07-28-hybrid-contextual-model-routing-hermes) — the story of building a three-signal classification engine that routes tasks to the right model without breaking prompt caching. That post covered the architecture, the honest provider discovery process, and the path to a plugin.
+Last week we published [Building a Hybrid Contextual Model Routing Stack for Hermes Agent](https://www.smfclearinghouse.com/blog/2026-07-28-hybrid-contextual-model-routing-hermes) — the story of building a three-signal classification engine that recommends the right model without changing the primary session.
 
-The path is now a road. The plugin is live.
+The plugin is now available for beta testing from its repository.
 
 **Repository:** [smfworks/hermes-plugin-hybrid-routing](https://github.com/smfworks/hermes-plugin-hybrid-routing)
 
@@ -24,7 +24,7 @@ The agent can now call routing directly as a tool, alongside its other tools:
 
 - `route_classify(text)` — classify a task and get a routing recommendation
 - `route_status()` — show the current routing configuration
-- `route_test()` — run the 9-case test suite
+- `route_test()` — run the 9-case classifier smoke suite
 
 The agent does not need to load a skill or run a terminal command. It calls the tool the same way it calls `web_search` or `read_file`. The routing decision comes back as structured JSON.
 
@@ -36,14 +36,16 @@ The `/route` slash command works in the CLI and on every gateway platform — Te
 ctx.register_command(
     name="route",
     handler=handle_route_command,
-    description="Model routing: /route [status|test|<text>]",
+    description="Model routing: /route [status|test|classify <text>|<text>]",
+    args_hint="[status|test|classify <text>|text]",
 )
 ```
 
 Usage:
 ```
 /route                              — show routing config
-/route test                         — run test suite
+/route test                         — run classifier smoke suite
+/route classify test                — classify the reserved task text "test"
 /route Analyze this architecture    — classify text
 ```
 
@@ -54,6 +56,7 @@ Terminal users get `hermes route`:
 ```bash
 hermes route                         — show config
 hermes route test                    — run tests
+hermes route classify status         — classify the reserved task text "status"
 hermes route "Debug this function"   — classify text
 ```
 
@@ -69,7 +72,7 @@ When the router detects no models configured, it returns a clear message:
 
 ```
 No models configured. Run 'hermes route' to set up your routing config,
-or copy the default config to ~/.hermes/profiles/<profile>/hybrid_routing/
+or copy the default config to $HERMES_HOME/hybrid_routing/
 routing_config.yaml and fill in your model refs.
 ```
 
@@ -82,43 +85,35 @@ This is the right install experience. A user who installs the plugin should imme
 ### Option A: From Hermes CLI
 
 ```bash
+# Default profile
 hermes plugins install smfworks/hermes-plugin-hybrid-routing
-```
-
-Hermes asks whether to enable the plugin on install. Say yes:
-
-```bash
 hermes plugins enable hybrid-contextual-routing
+
+# Named profile
+hermes -p <name> plugins install smfworks/hermes-plugin-hybrid-routing
+hermes -p <name> plugins enable hybrid-contextual-routing
 ```
 
-### Option B: Via pip
+### Option B: Manual clone
 
 ```bash
-pip install hermes-plugin-hybrid-routing
-```
-
-Then enable in Hermes:
-
-```bash
-hermes plugins enable hybrid-contextual-routing
-```
-
-### Option C: Manual clone
-
-```bash
+PROFILE_HOME="${HERMES_HOME:-$HOME/.hermes}"  # use ~/.hermes/profiles/<name> if needed
 git clone https://github.com/smfworks/hermes-plugin-hybrid-routing.git \
-  ~/.hermes/plugins/hybrid-contextual-routing
-hermes plugins enable hybrid-contextual-routing
+  "$PROFILE_HOME/plugins/hybrid-contextual-routing"
+env HERMES_HOME="$PROFILE_HOME" hermes plugins enable hybrid-contextual-routing
 ```
+
+The package is not yet published on PyPI; install it from GitHub until a release is announced.
 
 ## Configuration
 
 After install, copy the default config and fill in your models:
 
 ```bash
-mkdir -p ~/.hermes/profiles/<your-profile>/hybrid_routing/
-cp ~/.hermes/plugins/hybrid-contextual-routing/data/routing_config.yaml \
-   ~/.hermes/profiles/<your-profile>/hybrid_routing/routing_config.yaml
+PROFILE_HOME="${HERMES_HOME:-$HOME/.hermes}"  # use ~/.hermes/profiles/<name> for a named profile
+mkdir -p "$PROFILE_HOME/hybrid_routing"
+cp "$PROFILE_HOME/plugins/hybrid-contextual-routing/hybrid_contextual_routing/data/routing_config.yaml" \
+   "$PROFILE_HOME/hybrid_routing/routing_config.yaml"
 ```
 
 Run `hermes auth list` to see which providers you have, then edit the config:
@@ -132,8 +127,15 @@ tiers:
   strong:
     model: xai-oauth/grok-4.5
 
+egress_schema_version: 1
+model_egress:
+  custom:local-laguna/poolside/Laguna-S-2.1-NVFP4: local
+  ollama-cloud/glm-5.2: external
+  openai-codex/gpt-5.6-sol: external
+  xai-oauth/grok-4.5: external
+
 sensitivity:
-  local_only_model: ollama-cloud/qwen3.5:397b
+  local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4
 
 delegation:
   primary_model: openai-codex/gpt-5.6-sol
@@ -145,8 +147,8 @@ Verify:
 
 ```bash
 hermes route          # should show your models
-hermes route test     # should pass 9/9
-hermes route "test"   # should classify and show a routing decision
+hermes route test     # should pass 9/9 classifier checks
+hermes route "Debug this Python function"  # should show a routing decision
 ```
 
 ## Cloud/Local Hybrid Inference
@@ -166,8 +168,15 @@ roles:
   creative:
     model: ollama-cloud/glm-5.2                               # cloud, inexpensive
 
+egress_schema_version: 1
+model_egress:
+  custom:local-laguna/poolside/Laguna-S-2.1-NVFP4: local
+  openai-codex/gpt-5.6-sol: external
+  xai-oauth/grok-4.5: external
+  ollama-cloud/glm-5.2: external
+
 sensitivity:
-  local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4  # sensitive stays local
+  local_only_model: custom:local-laguna/poolside/Laguna-S-2.1-NVFP4
 ```
 
 This gives you:
@@ -175,29 +184,34 @@ This gives you:
 - **Balanced work** → cloud model, per-token
 - **Deep reasoning** → cloud frontier model, per-token
 - **Creative writing** → cloud model optimized for content
-- **Sensitive content** → local model, data never leaves your hardware
+- **Sensitive classifications** → recommend only the exact model explicitly classified `local`; otherwise fail closed
 
 ## Plugin Structure
 
-```
-hybrid_contextual_routing/
-├── plugin.yaml              # manifest — declares tools, commands, skill
-├── __init__.py              # registration — wires everything into Hermes
-├── router.py                # classification engine (profile-agnostic)
-├── data/
-│   └── routing_config.yaml  # default config (blank models, shipped)
-├── skill/
-│   └── SKILL.md             # bundled skill (agent guidance)
-└── README.md                # installation and usage docs
+```text
+hermes-plugin-hybrid-routing/
+├── plugin.yaml                         # source-install manifest
+├── __init__.py                         # source-install proxy
+├── hybrid_contextual_routing/
+│   ├── plugin.yaml                     # packaged manifest
+│   ├── __init__.py                     # tools, commands, and skill
+│   ├── router.py                       # deterministic classifier
+│   ├── data/routing_config.yaml        # blank-model template
+│   └── skill/SKILL.md                  # agent guidance
+└── README.md
 ```
 
 The classification engine is profile-agnostic. The config is profile-specific. Any Hermes user can install the plugin, configure their models, and get contextual routing — regardless of which providers they use.
 
 ## What the Plugin Does Not Do
 
-The router is advisory, not automatic. It does not hook into every turn and force model switches. The agent calls `route_classify` when it wants a routing recommendation, then decides whether to delegate based on the result.
+The router is advisory, not automatic. It does not hook every turn or force a model switch. The agent or user invokes the classifier and an orchestrator decides how to execute the recommendation.
 
-This is deliberate. Automatic hooks would inject into every turn and break prompt caching — the exact thing we built the delegation-based approach to avoid. The router respects the architecture. It gives the agent information. The agent makes the decision.
+That distinction matters. Hermes' standard `delegate_task` tool does not accept a per-call model; subagents inherit the configured delegation model. A caller must use an execution path that can select the returned provider/model, or preconfigure `delegation.provider` and `delegation.model` for the workload.
+
+The plugin is also not a data-loss-prevention boundary. Classification runs locally only after input reaches Hermes. A messaging gateway still transports the text, and a cloud-primary conversation may send it to that provider before the agent calls the router. For strict confidentiality, classify with the local CLI or another trusted transport, or use a trusted local primary model.
+
+`model_egress` makes the trust decision explicit and centralized; the router never infers locality from a provider-name prefix. Its `local` value is still operator-attested metadata, not network proof. Operators must verify the provider's effective endpoint or `base_url`, proxies, tunnels, and trust boundary.
 
 ## Why a Standalone Plugin, Not Core
 
@@ -205,7 +219,7 @@ Hermes' AGENTS.md is explicit about extension priorities:
 
 > *Prefer, in order: extend existing code → CLI command + skill → service-gated tool → plugin → MCP server → new core tool (last resort).*
 
-A plugin is the right layer for model routing. Not every Hermes user needs it — some run a single model and are happy. Routing assumes you have multiple providers, care about cost optimization, and want delegation-based switching. That is an opinionated feature, not universal infrastructure.
+A plugin is the right layer for model routing advice. Not every Hermes user needs it — some run a single model and are happy. Routing assumes you have multiple providers, care about cost optimization, and can connect recommendations to an execution path that supports explicit model selection. That is an opinionated feature, not universal infrastructure.
 
 A standalone plugin repo lets us iterate at our own speed. Community feedback drives the roadmap. If the Nous Research maintainers decide it belongs in core, we will submit with a track record. If it stays standalone, that is where it belongs.
 
@@ -219,15 +233,15 @@ We are shipping this as a beta and asking for community input before considering
 
 3. **What roles are missing?** We ship coding, research, creative, strategy, and vision. Legal, medical, education, and other verticals might need their own role definitions with specialized cue keywords.
 
-4. **Does the delegation pattern work in practice?** The router recommends delegation when the selected model differs from the primary. Does that produce good outcomes, or does the delegation overhead outweigh the benefit?
+4. **Does the recommendation integrate with your orchestrator?** The router identifies when a different model would help, but execution paths differ. Which Hermes workflow should own explicit per-task model selection?
 
-5. **What about cron jobs?** The plugin includes a reference mapping cron jobs to routing tiers, but does not automatically configure cron models. Should it?
+5. **What about cron jobs?** The plugin does not automatically configure cron models. Should it offer explicit cron-to-tier guidance?
 
 File issues on the [GitHub repo](https://github.com/smfworks/hermes-plugin-hybrid-routing) or reach out in the Nous Research Discord `#plugins-skills-and-skins` channel.
 
 ## The Roadmap
 
-**Now:** Plugin published, community feedback open.
+**Now:** GitHub beta available, community feedback open.
 
 **Phase 1 (next 2-3 weeks):** Gather feedback, fix issues, iterate on the repo. Tune heuristics based on real usage patterns. Add roles based on community requests.
 

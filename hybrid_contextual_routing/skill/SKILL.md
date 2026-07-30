@@ -1,105 +1,124 @@
 ---
 name: hybrid-contextual-routing
-description: "Pick the right model by role, difficulty, and sensitivity."
-version: 1.0.0
+description: "Pick a configured model by role, difficulty, sensitivity."
+version: 1.1.0
 author: SMF Works
 license: MIT
 ---
 
 # Hybrid Contextual Model Routing
 
-Route tasks to the right model based on what the task actually is — not a one-size-fits-all default.
+Use this skill to classify a task and recommend a configured model. The router is deterministic and advisory: it does not switch the active model or execute the recommendation.
 
 ## When to Use
 
-- A task might benefit from a different model than the session default
-- You want to check whether this task should be delegated
-- The user asks "which model should handle this?" or "/route"
-- You're setting up a cron job and need to pick the right model
-- You're doing sensitive work that should stay local
+- A task may benefit from a different model than the session default.
+- The user asks which model should handle a task.
+- A cron or workflow needs a model selected before it runs.
+- You want a local classification before submitting possibly sensitive text to an LLM.
 
-## The Core Principle
+## Classify
 
-**The primary session model stays fixed** (preserves prompt caching). Specialized tasks are **delegated to subagents** running the appropriate model. This is contextual switching without cache-breaking.
+Use one of these local entry points:
 
-## How It Works
-
-### Step 1: Classify the Task
-
-Use the `route_classify` tool:
-```
+```text
 route_classify(text="Analyze the strategic trade-offs of our roadmap")
-```
-
-Or use the `/route` slash command:
-```
 /route Analyze the strategic trade-offs of our roadmap
-```
-
-Or from the terminal:
-```bash
 hermes route "Analyze the strategic trade-offs of our roadmap"
 ```
 
-### Step 2: Interpret the Decision
+The decision contains:
 
-The router returns a routing decision with:
+| Field | Meaning |
+|---|---|
+| `model` | Selected configured `provider/model-id`, or empty when routing fails closed |
+| `egress` | Effective `local`, `external`, or derived `unknown` class |
+| `egress_declaration` | `operator` for an exact registry entry, otherwise `none` |
+| `candidates` | Ordered configured model refs retained for compatibility |
+| `candidate_routes` | Ordered refs paired atomically with egress and declaration provenance |
+| `tier` | `fast`, `balanced`, or `strong` |
+| `role` | Detected task category |
+| `difficulty` | `simple`, `standard`, or `hard` |
+| `sensitivity` | `normal` or `sensitive` |
+| `disposition` | Authoritative action: `inline`, `separate`, `block`, or `unavailable` |
+| `should_delegate` | Compatibility Boolean; true only when disposition is `separate` |
+| `reason` | Explanation of the decision |
 
-| Field | Values | Meaning |
-|-------|--------|---------|
-| `model` | `provider/model-id` | Which model to use |
-| `tier` | `fast` / `balanced` / `strong` | Cost/capability tier |
-| `role` | `coding` / `research` / `creative` / `strategy` / `vision` / `general` | Task category |
-| `difficulty` | `simple` / `standard` / `hard` | How complex the task is |
-| `sensitivity` | `normal` / `sensitive` | Whether content has PII/secrets |
-| `should_delegate` | `True` / `False` | Whether to delegate to a subagent |
-| `reason` | string | Why this decision was made |
+Model references must contain a non-empty provider and model ID, be no more than 512 characters, and contain no whitespace or terminal-control characters.
 
-### Step 3: Act on the Decision
+## Act on the Decision
 
-- **`should_delegate == False`** → Handle inline. The task matches the primary model or is simple enough.
-- **`should_delegate == True`** → Delegate to a subagent running the selected model.
-- **`sensitivity == sensitive`** → Content routes to a local-only model. Never send sensitive content to a cloud provider.
+- If `disposition` is `block`, do not process the sensitive text inline or invent a fallback.
+- If `disposition` is `unavailable`, report the configuration problem.
+- If `disposition` is `inline`, handle the task in the declared primary context when appropriate.
+- If `disposition` is `separate`, use an execution path that can actually select the returned provider/model.
+- Do not infer permission from `should_delegate: false`; that value also accompanies `block`.
+- Do **not** assume standard `delegate_task` can honor the selected model. Hermes subagents inherit the configured delegation model; the tool has no per-call model argument.
+- For recurring or session-scoped work, configure Hermes `delegation.provider` and `delegation.model` before delegating.
 
-## Routing Rules
+## Privacy Rules
 
+1. Sensitive classification has priority over role and difficulty.
+2. A sensitive decision contains only `sensitivity.local_only_model` when its exact ref is marked `local` in `model_egress`.
+3. A blank model, missing/mismatched metadata, or an `external` class fails closed with no candidate.
+4. Never infer locality from a provider or model name. Unlisted refs remain visibly `unknown`.
+5. Treat `local` as operator-attested metadata, not network proof. Verify the provider's effective endpoint or `base_url`, proxies, tunnels, and trust boundary.
+6. Sensitive decisions always recommend separate execution; configured primary-model string equality is not verified runtime identity.
+
+> This plugin is not a DLP boundary. Classification is local only after input reaches Hermes; a messaging gateway still transports the text, and a cloud primary may receive it before `route_classify` runs. For strict confidentiality, use the local CLI or another trusted transport before sending the task to an LLM, or use a trusted local primary model.
+
+## Routing Order
+
+```text
+Sensitivity:
+  sensitive -> exact local-classified model, otherwise fail closed
+  normal    -> continue
+
+Role:
+  configured specialized role model -> first candidate
+  otherwise                           -> difficulty tier
+
+Difficulty:
+  simple   -> fast, then balanced, then strong
+  standard -> balanced, then strong, then fast
+  hard     -> strong, then balanced, then fast
 ```
-Sensitivity first:
-  Sensitive → local-only model (never cloud)
-  Normal → continue
 
-Role second:
-  coding → coding model
-  creative → creative model
-  strategy → strong reasoning model
-  research → research model
-  general → tier check
+Blank model refs are skipped. The router never inserts an unconfigured built-in model. Missing or empty `sensitivity.patterns` is rejected rather than disabling configured classification. Bundled patterns cover common secret assignments, bearer credentials, private-key headers, SSN/card-number formats, and confidentiality markers; they are not a complete DLP detector. Configured patterns are additive.
 
-Difficulty tier last:
-  simple → fast tier (handle inline)
-  standard → balanced tier (usually inline)
-  hard → strong tier (usually delegate)
+Configure egress centrally by exact ref:
 
-Delegation:
-  Skip if: fast tier, or selected model == session default
-  Delegate if: different model needed, or sensitive content needs isolation
+```yaml
+egress_schema_version: 1
+model_egress:
+  custom:local-myserver/my-model: local
+  openai-codex/gpt-5.6-sol: external
+
+sensitivity:
+  local_only_model: custom:local-myserver/my-model
 ```
+
+Refs omitted from `model_egress` remain usable for normal routing but carry the effective class `unknown`.
 
 ## Configuration
 
-The config lives at:
-- **Default (shipped):** `~/.hermes/plugins/hybrid-contextual-routing/data/routing_config.yaml`
-- **User override:** `~/.hermes/profiles/<profile>/hybrid_routing/routing_config.yaml`
+- Repository/CLI install template: `$HERMES_HOME/plugins/hybrid-contextual-routing/hybrid_contextual_routing/data/routing_config.yaml`
+- Active override: `$HERMES_HOME/hybrid_routing/routing_config.yaml`
+- Default-profile fallback when `HERMES_HOME` is unset: `~/.hermes`
 
-The router uses the user override if it exists, otherwise the shipped default.
+For a named profile, `HERMES_HOME` is normally `~/.hermes/profiles/<profile>`.
+
+The profile override is re-read on each command or tool call.
 
 ## Useful Commands
 
-```
+```text
 /route                  — show current routing config
-/route test             — run the 9-case test suite
-/route <text>           — classify text and show routing decision
-hermes route             — CLI: show config
-hermes route test        — CLI: run tests
-hermes route "text"      — CLI: classify text
+/route test             — run the 9-case classifier test suite
+/route classify <text>  — classify reserved task text such as `test` or `status`
+/route <text>           — classify text
+hermes route            — show config
+hermes route test       — run tests
+hermes route classify <text> — classify reserved task text
+hermes route "text"     — classify text
 ```
