@@ -172,7 +172,7 @@ Configured model references must use `provider/model-id`, be 512 characters or f
 
 The classifier code runs locally after input reaches Hermes and does not call an LLM. For sensitive text, the router returns only `sensitivity.local_only_model` when the exact ref is explicitly classified `local` in `model_egress`. A blank model, absent or mismatched metadata, or an explicit `external` class produces no candidate and no fallback. A missing or empty `sensitivity.patterns` list is rejected so a partial override cannot silently disable detection.
 
-`local` is operator-attested metadata, not network attestation. The plugin does not infer trust from a provider prefix and cannot verify every provider's effective `base_url`, proxy, tunnel, DNS resolution, or transport. Verify the real destination before declaring a ref local and re-check it whenever provider configuration changes. See [Egress Trust Model](https://github.com/smfworks/hermes-plugin-hybrid-routing/blob/v1.1.0/docs/EGRESS-TRUST-MODEL.md).
+`local` is operator-attested metadata, not network attestation. The plugin does not infer trust from a provider prefix and cannot verify every provider's effective `base_url`, proxy, tunnel, DNS resolution, or transport. Verify the real destination before declaring a ref local and re-check it whenever provider configuration changes. See [Egress Trust Model](https://github.com/smfworks/hermes-plugin-hybrid-routing/blob/main/docs/EGRESS-TRUST-MODEL.md).
 
 This plugin is **not a data-loss-prevention boundary**. A messaging gateway such as Telegram, Discord, or Slack transports the text before Hermes can classify it. A cloud-hosted primary model may likewise receive session text before it calls `route_classify`. For strict confidentiality, classify through the local CLI or another trusted transport before submitting the task to an LLM, or start with a trusted local primary model.
 
@@ -241,15 +241,30 @@ hermes-plugin-hybrid-routing/
 │   ├── data/routing_config.yaml        # blank-model configuration template
 │   └── skill/SKILL.md                  # bundled agent guidance
 ├── tests/
-├── docs/EGRESS-TRUST-MODEL.md        # egress schema, invariants, and limits
+├── docs/EGRESS-TRUST-MODEL.md          # egress schema, invariants, and limits
+├── .github/workflows/ci.yml            # pytest, ruff, mypy, sdist checks
 ├── pyproject.toml
+├── SECURITY.md
+├── CONTRIBUTING.md
+├── CHANGELOG.md
 └── README.md
 ```
+
+## Development
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest -q
+ruff check .
+mypy hybrid_contextual_routing tests
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go to the contact in [SECURITY.md](SECURITY.md).
 
 ## Requirements
 
 - A current Hermes Agent installation (tested with v0.19.0)
-- Python 3.10 or later
+- Python 3.10 or later (CI covers 3.10–3.13)
 - At least one configured model for actionable recommendations
 
 PyYAML is installed automatically as a package dependency.

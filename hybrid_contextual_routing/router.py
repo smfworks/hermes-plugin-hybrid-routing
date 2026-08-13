@@ -90,6 +90,8 @@ _TIER_FALLBACK_ORDER = {
 
 _MAX_ROLE_CUES = 64
 _MAX_ROLE_CUE_LENGTH = 128
+MAX_CLASSIFY_CHARS = 262_144
+MAX_CONFIG_BYTES = 1_048_576
 _EGRESS_CLASSES = frozenset({EGRESS_LOCAL, EGRESS_EXTERNAL})
 _EGRESS_SCHEMA_VERSION = 1
 _DOUBLED_FINAL_CONSONANT_WORDS = frozenset(
@@ -151,6 +153,15 @@ _PLURAL_ONLY_CUE_WORDS = frozenset(
         "vision",
     }
 )
+
+
+def _require_classify_text(text: object) -> str:
+    """Reject non-strings and oversized classifier input before regex work."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
+    if len(text) > MAX_CLASSIFY_CHARS:
+        raise ValueError(f"text must be at most {MAX_CLASSIFY_CHARS} characters")
+    return text
 
 
 def _compile_patterns(patterns, field_name: str, flags: int = 0) -> list[re.Pattern]:
@@ -347,6 +358,14 @@ class HybridRouter:
                 f"Routing config not found at {path}. Create one using the template."
             )
         try:
+            size = path.stat().st_size
+        except OSError as exc:
+            raise ValueError(f"Unable to read routing config at {path}: {exc}") from exc
+        if size > MAX_CONFIG_BYTES:
+            raise ValueError(
+                f"Routing config at {path} exceeds {MAX_CONFIG_BYTES} bytes"
+            )
+        try:
             with open(path, encoding="utf-8") as config_file:
                 loader = _UniqueKeyLoader(config_file)
                 try:
@@ -490,6 +509,7 @@ class HybridRouter:
         self._loaded = True
 
     def classify_sensitivity(self, text: str) -> str:
+        text = _require_classify_text(text)
         if not text:
             return NORMAL
         self._ensure_compiled()
@@ -499,6 +519,7 @@ class HybridRouter:
         return NORMAL
 
     def classify_difficulty(self, text: str) -> str:
+        text = _require_classify_text(text)
         if not text:
             return STANDARD
         self._ensure_compiled()
@@ -524,6 +545,7 @@ class HybridRouter:
         return STANDARD
 
     def classify_role(self, text: str) -> str:
+        text = _require_classify_text(text)
         if not text:
             return "general"
         self._ensure_compiled()
@@ -732,6 +754,7 @@ class HybridRouter:
 
     def classify(self, text: str) -> RoutingDecision:
         """Classify a task and return a routing decision."""
+        text = _require_classify_text(text)
         self._ensure_compiled()
 
         sensitivity = self.classify_sensitivity(text)
@@ -783,7 +806,10 @@ class HybridRouter:
                     disposition="block",
                     candidates=[],
                 )
-            if self._model_egress(local_model) != EGRESS_LOCAL:
+            if (
+                self._egress_schema_version() != _EGRESS_SCHEMA_VERSION
+                or self._model_egress(local_model) != EGRESS_LOCAL
+            ):
                 return RoutingDecision(
                     model="",
                     provider="",
@@ -1036,7 +1062,9 @@ class HybridRouter:
                     else ""
                 ),
                 "local_route_ready": bool(
-                    local_only_model and local_only_egress == EGRESS_LOCAL
+                    local_only_model
+                    and schema_version == _EGRESS_SCHEMA_VERSION
+                    and local_only_egress == EGRESS_LOCAL
                 ),
                 "pattern_count": len(self._compiled_sensitive),
             },

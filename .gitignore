@@ -10,6 +10,8 @@ htmlcov/
 dist/
 build/
 .eggs/
+.venv/
+venv/
 *.so
 .env
 .DS_Store

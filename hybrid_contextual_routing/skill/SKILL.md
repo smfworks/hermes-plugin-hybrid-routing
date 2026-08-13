@@ -1,7 +1,7 @@
 ---
 name: hybrid-contextual-routing
 description: "Pick a configured model by role, difficulty, sensitivity."
-version: 1.1.0
+version: 1.1.1
 author: SMF Works
 license: MIT
 ---

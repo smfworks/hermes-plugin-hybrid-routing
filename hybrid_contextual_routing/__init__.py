@@ -12,11 +12,11 @@ import re
 import unicodedata
 from pathlib import Path
 
-from .router import HybridRouter
+from .router import MAX_CLASSIFY_CHARS, HybridRouter
 
 logger = logging.getLogger(__name__)
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 __description__ = (
     "Advisory contextual model routing for Hermes agents by sensitivity, role, "
     "and difficulty"
@@ -171,13 +171,24 @@ def handle_route_classify(args: dict, **kwargs) -> str:
         return json.dumps({"error": "'text' must be a string"})
     if not text.strip():
         return json.dumps({"error": "No text provided to classify"})
+    if len(text) > MAX_CLASSIFY_CHARS:
+        return json.dumps(
+            {"error": f"text must be at most {MAX_CLASSIFY_CHARS} characters"}
+        )
     try:
         router = _get_router()
         decision = router.classify(text)
+        logger.info(
+            "route_classify disposition=%s sensitivity=%s role=%s difficulty=%s",
+            decision.disposition,
+            decision.sensitivity,
+            decision.role,
+            decision.difficulty,
+        )
         return json.dumps(decision.to_dict(), indent=2)
     except Exception as e:
         logger.error("route_classify failed: %s", _safe_output_text(e))
-        return json.dumps({"error": f"Classification failed: {e}"})
+        return json.dumps({"error": f"Classification failed: {_safe_output_text(e)}"})
 
 
 def handle_route_status(args: dict, **kwargs) -> str:
@@ -189,7 +200,7 @@ def handle_route_status(args: dict, **kwargs) -> str:
         return json.dumps(status, indent=2)
     except Exception as e:
         logger.error("route_status failed: %s", _safe_output_text(e))
-        return json.dumps({"error": f"Status failed: {e}"})
+        return json.dumps({"error": f"Status failed: {_safe_output_text(e)}"})
 
 
 def handle_route_test(args: dict, **kwargs) -> str:
@@ -201,7 +212,7 @@ def handle_route_test(args: dict, **kwargs) -> str:
         return json.dumps(results, indent=2)
     except Exception as e:
         logger.error("route_test failed: %s", _safe_output_text(e))
-        return json.dumps({"error": f"Test failed: {e}"})
+        return json.dumps({"error": f"Test failed: {_safe_output_text(e)}"})
 
 
 # ── Slash command handler ──────────────────────────────────────────────
@@ -525,6 +536,7 @@ def handle_cli_route(args) -> int:
             else:
                 print(f"  {total - passed} FAILED ❌")
             print("=" * 60)
+            return 0 if passed == total else 1
         else:
             decision = router.classify(arg)
             decision_egress = _egress_provenance_label(
@@ -648,5 +660,7 @@ def register(ctx):
             name="hybrid-contextual-routing",
             path=skill_path,
         )
+    else:
+        logger.warning("bundled skill missing at %s", skill_path)
 
     logger.info("hybrid-contextual-routing plugin registered")
