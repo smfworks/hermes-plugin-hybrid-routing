@@ -115,11 +115,17 @@ Bundled secret assignments, bearer credentials, private-key headers, SSN/card-nu
 ### Step 3: Verify
 
 ```bash
+pip install -e ".[dev]"
+pytest -q
+ruff check .
+mypy hybrid_contextual_routing __init__.py
 hermes route                         # show configuration
 hermes route test                    # pass the 9 classification cases
 hermes route classify test           # classify the reserved task text "test"
 hermes route "Debug this function"   # show a routing decision
 ```
+
+Pull requests run the same pytest / ruff / mypy / bandit matrix in `.github/workflows/ci.yml`. `ollama-cloud/*` is never inferred as local; sensitive routes require an exact `model_egress: local` attestation. See [SECURITY.md](./SECURITY.md).
 
 Configuration is re-read on every tool or command invocation, so edits require no restart.
 

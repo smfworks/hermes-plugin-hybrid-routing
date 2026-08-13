@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+### Added
+
+- GitHub Actions CI matrix (pytest on Linux/macOS/Windows, ruff, mypy, bandit).
+- SECURITY.md and CONTRIBUTING.md.
+- Regression test: `ollama-cloud/*` is never inferred as a local sensitive destination.
+
 ## 1.1.0 — 2026-07-29
 
 ### Fixed
