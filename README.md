@@ -110,7 +110,7 @@ delegation:
 
 Leave any tier or role blank if you do not have a model for it. The router skips blank entries and chooses the nearest configured capability fallback. It never invents an unconfigured model. Normal models omitted from `model_egress` still route but are reported as `unknown`. A sensitive model must have an exact `local` entry or the decision fails closed.
 
-Bundled secret assignments, bearer credentials, private-key headers, SSN/card-number formats, and confidentiality markers are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline. This heuristic list is not a complete PII, secret-scanning, or DLP detector.
+Bundled secret assignments, bearer credentials, private-key headers, well-known token prefixes, database URIs with embedded passwords, SSN/card-number formats, and confidentiality markers are always enforced. Patterns in the copied configuration add detectors; they cannot replace the safety baseline. This heuristic list is not a complete PII, secret-scanning, or DLP detector.
 
 ### Step 3: Verify
 
@@ -119,6 +119,7 @@ hermes route                         # show configuration
 hermes route test                    # pass the 9 classification cases
 hermes route classify test           # classify the reserved task text "test"
 hermes route "Debug this function"   # show a routing decision
+# classify exits 2 when sensitive routing is blocked
 ```
 
 Configuration is re-read on every tool or command invocation, so edits require no restart.

@@ -531,11 +531,10 @@ def test_tier_max_input_tokens_must_be_a_nonnegative_integer(tmp_path, invalid_v
 
 def test_status_returns_only_validated_supported_config_fields(tmp_path):
     def configure(config):
-        unsupported = date(2026, 7, 29)
-        config["tiers"]["fast"]["unsupported"] = unsupported
-        config["roles"]["coding"]["unsupported"] = unsupported
-        config["difficulty"]["unsupported"] = unsupported
-        config["delegation"]["unsupported"] = unsupported
+        config["tiers"]["fast"]["unsupported"] = date(2026, 7, 29)
+        config["roles"]["coding"]["unsupported"] = date(2026, 7, 30)
+        config["difficulty"]["unsupported"] = date(2026, 7, 31)
+        config["delegation"]["unsupported"] = date(2026, 8, 1)
 
     status = configured_router(tmp_path, configure).get_status()
 
@@ -1030,8 +1029,8 @@ def test_duplicate_yaml_keys_are_rejected(tmp_path):
 def test_yaml_merge_keys_are_rejected(tmp_path):
     config_path = tmp_path / "routing_config.yaml"
     config_path.write_text(
-        "defaults: &defaults\n  provider/model: external\n"
-        "egress_schema_version: 1\nmodel_egress:\n  <<: *defaults\n",
+        "egress_schema_version: 1\n"
+        "model_egress:\n  <<:\n    provider/model: external\n",
         encoding="utf-8",
     )
 

@@ -115,6 +115,7 @@ def test_readme_uses_distribution_safe_trust_link_and_scoped_sensitivity_claims(
     assert "Bundled secret and PII patterns" not in readme
     assert (
         "secret assignments, bearer credentials, private-key headers, "
+        "well-known token prefixes, database URIs with embedded passwords, "
         "SSN/card-number formats, and confidentiality markers" in readme
     )
 

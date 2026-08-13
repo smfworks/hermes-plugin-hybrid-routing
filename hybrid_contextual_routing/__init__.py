@@ -12,11 +12,11 @@ import re
 import unicodedata
 from pathlib import Path
 
-from .router import MAX_CLASSIFY_CHARS, HybridRouter
+from .router import MAX_CLASSIFY_CHARS, HybridRouter, redacted_input_preview
 
 logger = logging.getLogger(__name__)
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 __description__ = (
     "Advisory contextual model routing for Hermes agents by sensitivity, role, "
     "and difficulty"
@@ -389,7 +389,13 @@ def handle_route_command(args: str, **kwargs) -> str:
 
 
 def handle_cli_route(args) -> int:
-    """Handle `hermes route` CLI subcommand."""
+    """Handle `hermes route` CLI subcommand.
+
+    Exit codes:
+      0 — status printed, ordinary classify completed, or smoke suite passed
+      1 — usage error, invalid config, or smoke suite failure
+      2 — classify completed but sensitive routing is blocked
+    """
     raw_args = list(args or [])
     explicit_classify = bool(raw_args and raw_args[0] == "classify")
     if explicit_classify:
@@ -512,6 +518,7 @@ def handle_cli_route(args) -> int:
             print()
             print(f"CONFIG: {_safe_output_text(status.get('config_path', '—'))}")
             print("=" * 60)
+            return 0
         elif arg == "test" and not explicit_classify:
             results = router.run_tests()
             passed = results["passed"]
@@ -549,10 +556,7 @@ def handle_cli_route(args) -> int:
             print("│  ROUTING DECISION                               │")
             print("└─────────────────────────────────────────────────┘")
             print()
-            print(
-                f"  Input:      {_safe_output_text(arg[:80])}"
-                f"{'...' if len(arg) > 80 else ''}"
-            )
+            print(f"  Input:      {redacted_input_preview(arg)}")
             print()
             print(f"  Model:      {decision.model or '—'}")
             print(f"  Provider:   {decision.provider or '—'}")
@@ -584,7 +588,7 @@ def handle_cli_route(args) -> int:
                 )
                 print(f"    {marker:12s} → {route['model']} [{route_egress}]")
             print()
-        return 0
+            return 2 if decision.disposition == "block" else 0
     except Exception as e:
         print(f"Error: {_safe_output_text(e)}")
         return 1
