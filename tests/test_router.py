@@ -1037,3 +1037,38 @@ def test_yaml_merge_keys_are_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="YAML merge keys are not supported"):
         HybridRouter(config_path=config_path).get_status()
+
+
+def test_classify_rejects_non_string_input():
+    router = HybridRouter()
+
+    with pytest.raises(TypeError, match="text must be a string"):
+        router.classify(None)  # type: ignore[arg-type]
+
+
+def test_classify_rejects_oversized_input():
+    from hybrid_contextual_routing.router import MAX_CLASSIFY_CHARS
+
+    router = HybridRouter()
+
+    with pytest.raises(ValueError, match="at most"):
+        router.classify("x" * (MAX_CLASSIFY_CHARS + 1))
+
+
+def test_config_file_size_is_bounded(tmp_path):
+    from hybrid_contextual_routing.router import MAX_CONFIG_BYTES
+
+    config_path = tmp_path / "routing_config.yaml"
+    config_path.write_bytes(b"x" * (MAX_CONFIG_BYTES + 1))
+
+    with pytest.raises(ValueError, match="exceeds"):
+        HybridRouter(config_path=str(config_path)).classify("hello")
+
+
+def test_empty_string_still_classifies_as_unconfigured_metadata():
+    decision = HybridRouter().classify("")
+
+    assert decision.sensitivity == "normal"
+    assert decision.difficulty == "standard"
+    assert decision.role == "general"
+    assert decision.disposition == "unavailable"

@@ -1068,3 +1068,101 @@ def test_entrypoint_registration_backfills_manifest_metadata():
     assert context.manifest.version == plugin.__version__
     assert context.manifest.description == plugin.__description__
     assert context.manifest.author == plugin.__author__
+
+
+def test_cli_test_returns_nonzero_when_smoke_suite_fails(monkeypatch, capsys):
+    class FakeRouter:
+        def run_tests(self):
+            return {
+                "passed": 8,
+                "total": 9,
+                "results": [
+                    {
+                        "test": 1,
+                        "input": "hi",
+                        "passed": False,
+                        "actual": {
+                            "model": "",
+                            "tier": "fast",
+                            "role": "general",
+                            "delegate": False,
+                        },
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(plugin, "_get_router", lambda: FakeRouter())
+
+    assert plugin.handle_cli_route(["test"]) == 1
+    output = capsys.readouterr().out
+    assert "8/9 passed" in output
+    assert "FAILED" in output
+
+
+def test_cli_test_returns_zero_when_smoke_suite_passes(monkeypatch, capsys):
+    class FakeRouter:
+        def run_tests(self):
+            return {"passed": 9, "total": 9, "results": []}
+
+    monkeypatch.setattr(plugin, "_get_router", lambda: FakeRouter())
+
+    assert plugin.handle_cli_route(["test"]) == 0
+    assert "ALL CLASSIFIER CHECKS PASSED" in capsys.readouterr().out
+
+
+def test_tool_errors_sanitize_control_characters(monkeypatch):
+    def boom():
+        raise ValueError("bad\x1b]52;c;payload\x07 config")
+
+    monkeypatch.setattr(plugin, "_get_router", boom)
+
+    result = json.loads(plugin.handle_route_classify({"text": "hello"}))
+
+    assert result["error"].startswith("Classification failed:")
+    assert "\x1b" not in result["error"]
+    assert "\\x1b" in result["error"]
+
+
+def test_route_classify_rejects_oversized_text_without_constructing_router(
+    monkeypatch,
+):
+    called = {"value": False}
+
+    def boom():
+        called["value"] = True
+        raise AssertionError("router should not be constructed")
+
+    monkeypatch.setattr(plugin, "_get_router", boom)
+
+    result = json.loads(
+        plugin.handle_route_classify({"text": "x" * (plugin.MAX_CLASSIFY_CHARS + 1)})
+    )
+
+    assert called["value"] is False
+    assert result == {
+        "error": f"text must be at most {plugin.MAX_CLASSIFY_CHARS} characters"
+    }
+
+
+def test_register_warns_when_bundled_skill_is_missing(monkeypatch, caplog):
+    import logging
+
+    class Context:
+        def register_tool(self, **kwargs):
+            pass
+
+        def register_command(self, **kwargs):
+            pass
+
+        def register_cli_command(self, **kwargs):
+            pass
+
+        def register_skill(self, **kwargs):
+            raise AssertionError("skill should not register")
+
+    monkeypatch.setattr(Path, "exists", lambda self: False)
+    caplog.set_level(logging.WARNING, logger="hybrid_contextual_routing")
+
+    plugin.register(Context())
+
+    assert "bundled skill missing" in caplog.text

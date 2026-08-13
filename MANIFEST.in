@@ -1,5 +1,6 @@
-include ANNOUNCE-POST.md CHANGELOG.md README.md
+include ANNOUNCE-POST.md CHANGELOG.md README.md LICENSE
+include SECURITY.md CONTRIBUTING.md
 include __init__.py
 include plugin.yaml
 recursive-include docs *.md
-recursive-include hybrid_contextual_routing *.md *.yaml
+recursive-include hybrid_contextual_routing *.md *.yaml py.typed

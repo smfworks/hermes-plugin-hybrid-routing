@@ -83,7 +83,8 @@ def test_sdist_manifest_keeps_source_plugin_and_trust_model_complete():
 
     assert "include __init__.py" in manifest
     assert "include plugin.yaml" in manifest
-    assert "include ANNOUNCE-POST.md CHANGELOG.md" in manifest
+    assert "include ANNOUNCE-POST.md CHANGELOG.md README.md LICENSE" in manifest
+    assert "include SECURITY.md CONTRIBUTING.md" in manifest
     assert "recursive-include docs *.md" in manifest
 
 
@@ -103,8 +104,12 @@ def test_readme_uses_distribution_safe_trust_link_and_scoped_sensitivity_claims(
 
     assert (
         "https://github.com/smfworks/hermes-plugin-hybrid-routing/"
-        "blob/v1.1.0/docs/EGRESS-TRUST-MODEL.md"
+        "blob/main/docs/EGRESS-TRUST-MODEL.md"
     ) in readme
+    assert "blob/v1.1.0/docs/EGRESS-TRUST-MODEL.md" not in readme
+    assert 'pip install -e ".[dev]"' in readme
+    assert "SECURITY.md" in readme
+    assert "CONTRIBUTING.md" in readme
     assert "](docs/EGRESS-TRUST-MODEL.md)" not in readme
     assert "secrets, PII, and confidentiality markers" not in readme
     assert "Bundled secret and PII patterns" not in readme
@@ -140,3 +145,22 @@ def test_readme_scopes_role_cue_inflections_to_reviewed_words():
     )
     assert ambiguous_claim in readme
     assert "such as `refactor`, `refactors`, `refactored`, and `refactoring`" in readme
+
+
+def test_security_and_contributing_docs_exist():
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    assert "aionaedge@agentmail.to" in security
+    assert "Do **not** open a public GitHub issue" in security
+    assert 'pip install -e ".[dev]"' in contributing
+
+
+def test_ci_workflow_installs_the_editable_package():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert 'pip install -e ".[dev]"' in workflow
+    assert "python -m pytest" in workflow
+    assert "ruff check" in workflow
+    assert "mypy hybrid_contextual_routing tests" in workflow
+    assert "python -m build" in workflow

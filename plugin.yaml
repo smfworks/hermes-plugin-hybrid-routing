@@ -1,7 +1,8 @@
 name: hybrid-contextual-routing
-version: 1.1.0
+version: 1.1.1
 description: Advisory contextual model routing for Hermes agents by sensitivity, role, and difficulty
 author: SMF Works
+license: MIT
 provides_tools:
   - route_classify
   - route_status

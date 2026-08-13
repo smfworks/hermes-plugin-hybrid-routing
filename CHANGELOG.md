@@ -4,9 +4,23 @@ All notable changes to this project are documented here.
 
 ## 1.1.1 — 2026-08-13
 
-### Added
-- GitHub Actions CI (pytest on Python 3.10–3.12)
-- SECURITY.md and CONTRIBUTING.md
+### Fixed
+
+- Return a non-zero CLI exit code when `hermes route test` fails the smoke suite.
+- Reject non-string and oversized classify input before running sensitivity regexes.
+- Reject routing configs larger than 1 MiB before YAML parse.
+- Sanitize tool JSON error payloads the same way slash and CLI output is sanitized.
+- Require `egress_schema_version: 1` for `local_route_ready` and for an actionable sensitive route.
+- Include `LICENSE`, `SECURITY.md`, and `CONTRIBUTING.md` in the source distribution.
+- Point the README trust-model link at `main` so packaged copies do not depend on a tag.
+
+### Quality
+
+- Add GitHub Actions CI (`pip install -e ".[dev]"`, Ruff, Mypy, pytest, build/twine) on Python 3.10–3.13.
+- Add Dependabot for GitHub Actions and pip.
+- Add SECURITY.md and CONTRIBUTING.md; document the editable install path in the README.
+- Log payload-free classification outcomes; warn if the bundled skill file is missing.
+- Mark the package Production/Stable and ship a `py.typed` marker.
 
 ## 1.1.0 — 2026-07-29
 

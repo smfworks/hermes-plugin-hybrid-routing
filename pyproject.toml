@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-plugin-hybrid-routing"
-version = "1.1.0"
+version = "1.1.1"
 description = "Advisory contextual model routing for Hermes agents by sensitivity, role, and difficulty"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "SMF Works", email = "aionaedge@agentmail.to"},
 ]
@@ -18,12 +19,13 @@ dependencies = [
 
 keywords = ["hermes", "ai-agent", "model-routing", "contextual-switching", "delegation", "cost-optimization"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -54,7 +56,7 @@ include-package-data = false
 packages = ["hybrid_contextual_routing"]
 
 [tool.setuptools.package-data]
-hybrid_contextual_routing = ["plugin.yaml", "data/*.yaml", "skill/*.md"]
+hybrid_contextual_routing = ["plugin.yaml", "data/*.yaml", "skill/*.md", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
