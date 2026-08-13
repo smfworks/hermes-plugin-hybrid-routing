@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.1 — 2026-08-13
+
+### Added
+- GitHub Actions CI (pytest on Python 3.10–3.12)
+- SECURITY.md and CONTRIBUTING.md
+
 ## 1.1.0 — 2026-07-29
 
 ### Fixed
