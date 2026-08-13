@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Regression test: `ollama-cloud/*` is never inferred as a local sensitive destination.
+
 All notable changes to this project are documented here.
 
 ## 1.1.1 — 2026-08-13
