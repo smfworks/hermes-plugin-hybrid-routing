@@ -22,7 +22,18 @@ import yaml
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
-    """Safe YAML loader that rejects duplicate and merge mapping keys."""
+    """Safe YAML loader that rejects aliases, merge keys, and duplicate keys."""
+
+    def compose_node(self, parent, index):
+        event = self.peek_event()
+        if isinstance(event, yaml.AliasEvent):
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "YAML aliases are not supported",
+                event.start_mark,
+            )
+        return super().compose_node(parent, index)
 
 
 def _construct_unique_mapping(
@@ -155,6 +166,45 @@ _PLURAL_ONLY_CUE_WORDS = frozenset(
 )
 
 
+# Format/mark characters that can split a keyword without changing meaning.
+_SENSITIVITY_STRIP_CATEGORIES = frozenset({"Cf", "Mn", "Me"})
+# Reviewed lookalikes used to spoof latin credential keywords. Not a full
+# Unicode confusable list.
+_SENSITIVITY_CONFUSABLES = str.maketrans(
+    {
+        "а": "a",
+        "А": "A",
+        "е": "e",
+        "Е": "E",
+        "о": "o",
+        "О": "O",
+        "р": "p",
+        "Р": "P",
+        "с": "c",
+        "С": "C",
+        "у": "y",
+        "У": "Y",
+        "х": "x",
+        "Х": "X",
+        "і": "i",
+        "І": "I",
+        "ј": "j",
+        "Ј": "J",
+        "ѕ": "s",
+        "Ѕ": "S",
+        "ԁ": "d",
+        "α": "a",
+        "Α": "A",
+        "ο": "o",
+        "Ο": "O",
+        "ρ": "p",
+        "Ρ": "P",
+        "χ": "x",
+        "Χ": "X",
+    }
+)
+
+
 def _require_classify_text(text: object) -> str:
     """Reject non-strings and oversized classifier input before regex work."""
     if not isinstance(text, str):
@@ -162,6 +212,36 @@ def _require_classify_text(text: object) -> str:
     if len(text) > MAX_CLASSIFY_CHARS:
         raise ValueError(f"text must be at most {MAX_CLASSIFY_CHARS} characters")
     return text
+
+
+def redacted_input_preview(text: str) -> str:
+    """Describe classify input without echoing payload bytes."""
+    return f"[redacted {len(text)} characters]"
+
+
+def _sensitivity_scan_text(text: str) -> str:
+    """Fold obvious obfuscation before running sensitivity detectors.
+
+    Role and difficulty classification keep the original text. Sensitivity
+    matching uses this scan form so zero-width, fullwidth, combining-mark,
+    and reviewed lookalike spoofs cannot route secrets to a cloud model.
+    """
+    compatibility = unicodedata.normalize("NFKC", text)
+    decomposed = unicodedata.normalize("NFKD", compatibility)
+    rendered: list[str] = []
+    for char in decomposed:
+        category = unicodedata.category(char)
+        if category in _SENSITIVITY_STRIP_CATEGORIES:
+            continue
+        if category == "Cc" and char not in "\n\r\t":
+            continue
+        if category in {"Zl", "Zp"}:
+            rendered.append("\n")
+            continue
+        rendered.append(char)
+    return unicodedata.normalize("NFC", "".join(rendered)).translate(
+        _SENSITIVITY_CONFUSABLES
+    )
 
 
 def _compile_patterns(patterns, field_name: str, flags: int = 0) -> list[re.Pattern]:
@@ -513,8 +593,9 @@ class HybridRouter:
         if not text:
             return NORMAL
         self._ensure_compiled()
+        scan_text = _sensitivity_scan_text(text)
         for pattern in self._compiled_sensitive:
-            if pattern.search(text):
+            if pattern.search(scan_text):
                 return SENSITIVE
         return NORMAL
 
@@ -935,7 +1016,7 @@ class HybridRouter:
     def explain(self, text: str) -> dict:
         d = self.classify(text)
         result = d.to_dict()
-        result["input_preview"] = text[:200] + ("..." if len(text) > 200 else "")
+        result["input_preview"] = redacted_input_preview(text)
         return result
 
     def get_status(self) -> dict:

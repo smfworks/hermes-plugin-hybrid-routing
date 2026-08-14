@@ -94,10 +94,11 @@ def test_blocked_sensitive_route_is_unambiguous_at_every_public_boundary(
     assert (
         "• **Separate execution:** **BLOCKED — do not process inline**" in slash_result
     )
-    assert exit_code == 0
+    assert exit_code == 2
     assert "Sensitivity: sensitive" in output
     assert "Disposition: block" in output
     assert "Separate:   BLOCKED — do not process inline" in output
+    assert "password=private-value" not in output
 
 
 @pytest.mark.parametrize(
@@ -216,9 +217,10 @@ def test_high_value_credential_forms_block_across_public_boundaries(
     assert tool_result["model"] == ""
     assert tool_result["candidates"] == []
     assert "• **Disposition:** `block`" in slash_result
-    assert exit_code == 0
+    assert exit_code == 2
     assert "Sensitivity: sensitive" in cli_output
     assert "Disposition: block" in cli_output
+    assert text not in cli_output
 
 
 @pytest.mark.parametrize(
@@ -348,7 +350,8 @@ def test_reserved_task_text_has_explicit_classify_form_across_public_surfaces(
     assert "Classifier Smoke Suite" not in slash_result
     assert "Routing — Configuration" not in slash_result
     assert exit_code == 0
-    assert f"Input:      {text}" in cli_output
+    assert "Input:      [redacted" in cli_output
+    assert f"Input:      {text}" not in cli_output
     assert f"Role:       {role}" in cli_output
     assert seen == [text, text, text]
 

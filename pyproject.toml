@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-plugin-hybrid-routing"
-version = "1.1.1"
+version = "1.1.2"
 description = "Advisory contextual model routing for Hermes agents by sensitivity, role, and difficulty"
 readme = "README.md"
 license = "MIT"

@@ -29,9 +29,13 @@ attestation contract.
 - Bundled sensitivity detectors cannot be replaced by a copied config; extra
   patterns are additive.
 - Public slash/CLI output escapes control characters. Tool JSON errors are
-  sanitized the same way.
+  sanitized the same way. The CLI does not echo classify payloads and exits
+  `2` when a sensitive route is blocked.
 - Classifier input is bounded (`MAX_CLASSIFY_CHARS`). Config files are
-  bounded (`MAX_CONFIG_BYTES`).
+  bounded (`MAX_CONFIG_BYTES`). YAML aliases and merge keys are rejected.
+- Sensitivity matching folds fullwidth, zero-width, combining-mark, and a
+  reviewed lookalike set before detectors run. This is not a complete
+  Unicode-confusable or DLP boundary.
 - The plugin is **not** a DLP or gateway privacy boundary. Messaging
   transports and a cloud primary model may see text before classification.
 

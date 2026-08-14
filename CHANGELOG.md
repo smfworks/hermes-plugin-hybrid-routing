@@ -8,6 +8,21 @@
 
 All notable changes to this project are documented here.
 
+## 1.1.2 — 2026-08-13
+
+### Fixed
+
+- Normalize classifier text for sensitivity matching so fullwidth, zero-width,
+  combining-mark, and reviewed lookalike spoofs cannot send secrets to a cloud
+  model.
+- Add bundled detectors for well-known token prefixes, AWS access-key IDs,
+  `Authorization: Token/Basic`, `private_key`/`passwd` assignments, and
+  database URIs with an embedded password.
+- Reject YAML aliases so a small config cannot expand into a graph bomb.
+- Return CLI exit code `2` when classify is blocked for sensitivity, instead of
+  treating a blocked secret route as a successful `0`.
+- Stop echoing classify input on the CLI and in `explain()` previews.
+
 ## 1.1.1 — 2026-08-13
 
 ### Fixed

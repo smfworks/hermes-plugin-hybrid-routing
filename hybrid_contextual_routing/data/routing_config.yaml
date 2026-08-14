@@ -149,8 +149,9 @@ model_egress: {}
 sensitivity:
   local_only_model: ""
   # Baseline heuristics cover common assignments, bounded non-metadata-qualified
-  # variables, bearer credentials, private-key headers, SSN/card-number formats,
-  # and confidentiality markers. Policy/status variables and explicit negated
+  # variables, bearer credentials, private-key headers, well-known token prefixes,
+  # database URIs with embedded passwords, SSN/card-number formats, and
+  # confidentiality markers. Policy/status variables and explicit negated
   # state prose are excluded from assignment detection.
   # They are not a complete secret-scanning, PII, or DLP boundary.
   patterns:
@@ -202,6 +203,23 @@ sensitivity:
     - "\\b\\d{3}-\\d{2}-\\d{4}\\b"
     - "\\b(?:\\d[ -]?){13,16}\\b"
     - "(?i)(?:\\b(?:highly\\s+confidential|confidential|restricted|secret|internal only)\\b|\\bmip:)"
+    - >-
+      (?ix)
+      (?:\b|_)
+      (?:aws[_-]?access[_-]?key[_-]?id|openai[_-]?key|private[_-]?key|
+         encryption[_-]?key|master[_-]?key|signing[_-]?key|passwd|db[_-]?pass)
+      ["']?\s*(?::|=)\s*\S+
+    - >-
+      (?ix)
+      \b(?:sk-[a-z0-9_-]{16,}|ghp_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|
+         xox[baprs]-[a-z0-9-]{10,}|akia[0-9a-z]{16}|
+         eyj[a-z0-9_-]{8,}\.[a-z0-9_-]{8,}\.)
+    - >-
+      (?ix)
+      \b(?:postgres(?:ql)?|mysql|mongodb|redis|amqp)://[^\s:/]+:[^\s@/]+@
+    - >-
+      (?ix)
+      \bauthorization\s*:\s*(?:token|basic)\s+\S+
 
 # ── Difficulty Classification ──────────────────────────────────────────
 # These heuristics work out of the box — no configuration needed.
