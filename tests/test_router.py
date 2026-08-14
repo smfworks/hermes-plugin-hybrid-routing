@@ -240,6 +240,29 @@ def test_sensitive_model_without_explicit_local_egress_fails_closed(tmp_path):
     assert status["egress_metadata"]["sensitive_migration_required"] is True
 
 
+def test_ollama_cloud_name_is_not_inferred_local_for_sensitive_routes(tmp_path):
+    """Provider names such as ollama-cloud must never imply locality."""
+
+    def configure(config):
+        config["tiers"]["fast"]["model"] = "ollama-cloud/glm-5.2"
+        config["tiers"]["balanced"]["model"] = "ollama-cloud/glm-5.2"
+        config["sensitivity"]["local_only_model"] = "ollama-cloud/glm-5.2"
+        config["model_egress"] = {}
+        config["delegation"]["primary_model"] = "ollama-cloud/glm-5.2"
+
+    router = configured_router(tmp_path, configure)
+    decision = router.classify("password=private-value")
+    status = router.get_status()
+
+    assert decision.sensitivity == "sensitive"
+    assert decision.model == ""
+    assert decision.candidates == []
+    assert decision.disposition == "block"
+    assert decision.egress != "local"
+    assert status["sensitivity"]["local_only_egress"] == "unknown"
+    assert "ollama-cloud/glm-5.2" not in (decision.candidates or [])
+
+
 def test_sensitive_content_has_no_cloud_fallbacks_and_requests_separate_execution(
     tmp_path,
 ):
