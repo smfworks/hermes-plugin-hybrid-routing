@@ -21,6 +21,30 @@ from pathlib import Path
 import yaml
 
 
+def _constructor_problem_mark(
+    mark: yaml.error.Mark | yaml._yaml.Mark | None,
+) -> yaml.error.Mark | None:
+    """Adapt a loader mark to the type ``ConstructorError`` accepts.
+
+    LibYAML's ``yaml._yaml.Mark`` and the pure-Python ``yaml.error.Mark`` are
+    distinct classes. ``MarkedYAMLError`` stores a pure-Python mark and reads
+    its location fields, so copy those fields across. C marks leave the source
+    buffer empty, and the resulting message matches the original mark.
+    """
+    if mark is None or isinstance(mark, yaml.error.Mark):
+        return mark
+    buffer = mark.buffer if isinstance(mark.buffer, str) else None
+    pointer = mark.pointer if isinstance(mark.pointer, int) else 0
+    return yaml.error.Mark(
+        str(mark.name),
+        mark.index,
+        mark.line,
+        mark.column,
+        buffer,
+        pointer,
+    )
+
+
 class _UniqueKeyLoader(yaml.SafeLoader):
     """Safe YAML loader that rejects aliases, merge keys, and duplicate keys."""
 
@@ -31,7 +55,7 @@ class _UniqueKeyLoader(yaml.SafeLoader):
                 None,
                 None,
                 "YAML aliases are not supported",
-                event.start_mark,
+                _constructor_problem_mark(event.start_mark),
             )
         return super().compose_node(parent, index)
 

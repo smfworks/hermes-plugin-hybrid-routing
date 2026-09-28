@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Pass a pure-Python YAML mark into `ConstructorError` when rejecting aliases, so mypy accepts both libyaml and pure-Python loader marks.
+
 ### Added
 
 - Regression test: `ollama-cloud/*` is never inferred as a local sensitive destination.
